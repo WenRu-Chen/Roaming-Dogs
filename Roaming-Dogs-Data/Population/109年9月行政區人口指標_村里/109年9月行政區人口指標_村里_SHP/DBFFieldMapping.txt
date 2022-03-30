@@ -1,0 +1,5 @@
+原欄位名稱 = DBF檔中欄位名稱
+a0a14_a15a65_rat = fld2
+a65_a0a14_rat = fld4
+a65up_a15a64_rat = fld3
+dependency_rat = fld1
