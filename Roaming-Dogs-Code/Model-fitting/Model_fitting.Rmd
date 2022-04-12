@@ -1,0 +1,215 @@
+---
+title: "Model Fitting"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## library the packages
+
+
+
+```{r}
+library(GWmodel)      ### GW models
+library(dplyr)
+library(sp)           ## Data management
+library(car)          ## vif
+library(spdep)        ## Spatial autocorrelation
+library(RColorBrewer) ## Visualization
+library(classInt)     ## Class intervals
+library(raster)       ## spatial data
+library(grid)         # plot
+library(gridExtra)    # Multiple plot
+library(ggplot2)      # Multiple plot
+library(gtable)
+library(GGally)       # 相關係數圖矩陣（scatter plot matrix）
+library(maptools)
+library(MASS)
+library(tmap)
+```
+
+## Function 
+
+### pdf_Plot
+
+
+```{r pdf_Plot}
+pdf_plot <- function(x){
+  g = ggplot()+
+    geom_histogram(aes(x = x, y = ..density..), 
+                   fill = '#557C55', alpha = 0.8)+
+    geom_density(aes(x = x, y = ..density..), 
+                 color = '#062C30', size = 1)+
+    theme_bw()
+  
+  return(g)
+}
+```
+
+## Load and tidy data
+
+```{r Load data}
+getwd()
+```
+
+
+```{r Load data}
+path = '..\\..\\Roaming-Dogs-Data\\'
+Variable_KS_df <- read.csv(paste0(path, "@Test_KS\\Variable.csv" ), fileEncoding = 'utf-8')
+Variable_KS_shp<-shapefile(paste0(path, "@Test_KS\\Variable.shp" ),encoding = 'big5')
+
+
+Variable_KS_shp@data[is.na(Variable_KS_shp@data)] <- 0
+Variable_KS_df[is.na(Variable_KS_df)] <- 0
+```
+
+```{r Varaible name 01}
+col_X = 
+  c( "Cluster", # 分群
+     "Market","Hospital","Clinic", "Temple", "Ele","Junior" ,"Senior", "Train.stat", # 公共建設
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta") # 村里收入
+col_y = c('Nr')
+
+```
+
+```{r 轉成數值}
+for(i in c(col_X, col_y)){
+  
+  Variable_KS_shp@data[i] = sapply(Variable_KS_shp@data[i], function(x) as.numeric(x))
+  Variable_KS_df[i] = sapply(Variable_KS_df[i], function(x) as.numeric(x))
+}
+```
+
+### 轉成密度
+```{r 轉成密度}
+for(i in c('Market','Hospital',  "Temple",  "Ele" ,"Junior" ,"Senior", "Train.stat",  "Clinic")){
+  
+  i_new = paste0(i, "_den")
+
+  Variable_KS_shp@data[i_new] = Variable_KS_shp@data[i]/Variable_KS_shp@data$Area_sqkm
+  Variable_KS_df[i_new] = Variable_KS_df[i]/Variable_KS_df$Area_sqkm
+}
+```
+
+### Scale the Data
+```{r scale the data}
+
+for (i in col_X[col_X != "Cluster"]){
+
+    Variable_KS_df[i] <- scale(Variable_KS_df[i])
+    Variable_KS_shp@data[i] <-scale(Variable_KS_shp@data[i])
+
+}
+```
+
+```{r Varaible name 02}
+col_X = 
+  c( "Cluster", # 分群
+     "Market_den","Hospital_den" ,  "Temple_den",  "Ele_den" ,"Junior_den" ,"Senior_den", "Train.stat_den",  "Clinic_den", # 公共建設
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta")
+```
+
+
+## Correlation
+```{r correlation}
+corr = cor(Variable_KS_df[c(col_y,col_X)])
+idx = abs(corr[,col_y])>.1
+col_X_02 = names(corr[idx,col_y]) %>% tail(-1)
+```
+
+## Global PCA 
+
+- 沒有考慮地理加權
+
+```{r}
+data = Variable_KS_df[c(col_X_02,col_y)]
+class(data)
+
+pca <- prcomp(~.,  #選擇變數 
+              data = Variable_KS_df[c(col_X_02)],  # 資料
+              scale = TRUE)                          # 正規化資料
+```
+
+### 陡坡圖(Scree plot)-凱莎原則
+
+```{r Scree Plot for PCA}
+plot(pca,         # 放pca
+     type="line", # 用直線連結每個點
+     main="Scree Plot for PCA") # 主標題
+```
+
+### 累積解釋圖(Pareto plot)
+
+從pca中取出標準差(pca$sdev)後再平方，計算variance(特徵值)
+
+```{r Pareto plot}
+
+# 從pca中取出標準差(pca$sdev)後再平方，計算variance(特徵值)
+vars <- (pca$sdev)^2  
+
+# 計算每個主成分的解釋比例 = 各個主成分的特徵值/總特徵值
+props <- vars / sum(vars) 
+
+print(props)
+
+# 累加前n個元素的值
+cumulative.props <- cumsum(props)  # 累加前n個元素的值
+cumulative.props
+
+ggplot()+
+  geom_point(aes(x = c(1:length(cumulative.props)), y = cumulative.props))+
+  ggtitle("累積解釋圖")
+```
+
+### New Variable
+
+```{r }
+col_PC = c()
+
+for(i in c(1:4)){
+  col_PC[i] = paste0("PC",i)
+  Variable_KS_shp@data[paste0("PC",i)] <- pca$x[, i]
+  Variable_KS_df[paste0("PC",i)] <- pca$x[, i]
+}
+```
+
+## Negative Binomial
+- (https://francish.netlify.app/post/poisson-and-negative-binomial-regression-using-r/)
+```{r}
+
+glm.nb.model <- glm.nb(Nr~., data = Variable_KS_df[c(col_PC, col_y)]) #negative binomial
+summary(glm.nb.model)
+```
+```{r pdf_plot: nb regression residual}
+pdf_plot(glm.nb.model$residuals)
+```
+```{r pdf_plot: nb regression residual}
+ggplot(Variable_KS_df)+
+  geom_point(aes(x = X, y = Y, color = glm.nb.model$residuals))
+```
+
+## GWR-Possion
+### Select bw
+```{r DW bw}
+DM <- gw.dist(dp.locat=data.matrix(((Variable_KS_df[c('X', "Y")]))))
+
+formula.PC = Nr~PC1+PC2+PC3+PC4
+
+bw <- bw.ggwr(formula.PC,  
+                  data = Variable_KS_shp,
+                  family = "poisson",
+                  approach = "AICc",
+                  kernel = "gaussian", 
+                  adaptive = TRUE,
+                  dMat = DM )
+bw
+```
+
+
+## GW Model 
+- https://arxiv.org/ftp/arxiv/papers/1312/1312.2753.pdf
+

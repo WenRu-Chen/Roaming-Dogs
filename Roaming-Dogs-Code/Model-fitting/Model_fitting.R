@@ -16,6 +16,10 @@ library(maptools)
 library(MASS)
 library(tmap)
 
+##Fix some problem ####
+# library(grounhdog)
+# groundhog.library('rgdal', '2020-10-11')
+
 # Function ####
 
 # * Plot ####
@@ -36,12 +40,15 @@ path = 'Roaming-Dogs-Data\\'
 Variable_KS_df <- read.csv(paste0(path, "@Test_KS\\Variable.csv" ), fileEncoding = 'utf-8')
 Variable_KS_df["Clinic"][is.na(Variable_KS_df["Clinic"])] = 0
 Variable_KS_shp<-shapefile(paste0(path, "@Test_KS\\Variable.shp" ),encoding = 'big5')
-crs(Variable_KS_shp) <- CRS('+init=EPSG:3826') 
+Variable_KS_shp@proj4string
+
+Variable_KS_shp@data[is.na(Variable_KS_shp@data)] <- 0
+Variable_KS_df[is.na(Variable_KS_df)] <- 0
 
 # *轉數值 ####
 for(i in c(col_X, col_y)){
   
-  Variable_KS_shp@data[i] = sapply(Variable_KS_df[i], function(x) as.numeric(x))
+  Variable_KS_shp@data[i] = sapply(Variable_KS_df$i, function(x) as.numeric(x))
 }
 
 # Select X y ####
@@ -50,7 +57,7 @@ col_X =
   c( "Cluster", # 分群
      "Market","Hospital" ,  "Temple",  "Ele" ,"Junior" ,"Senior", "Train.stat",  "Clinic", # 公共建設
      "high_rat",   "mid_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
-     "Income_mea", "Income_med" ,"Income_Q1",  "Income_Q3",  "Income_sta") # 村里收入
+     "Income_mea","Income_sta") # 村里收入
 col_y = c('Nt')
 
 # *轉換成密度 (間/平方公里)
@@ -64,9 +71,9 @@ for(i in c('Market','Hospital',  "Temple",  "Ele" ,"Junior" ,"Senior", "Train.st
   Variable_KS_df[i_new] = Variable_KS_df[i]/Variable_KS_df$Area_sqkm
 }
 
-# *收入range ####
-Variable_KS_shp@data["Income_Q3-Q1"] = Variable_KS_shp@data["Income_Q3"]-Variable_KS_shp@data["Income_Q1"]
-Variable_KS_df["Income_Q3-Q1"] = Variable_KS_df["Income_Q3"]-Variable_KS_df["Income_Q1"]
+# # *收入range ####
+# Variable_KS_shp@data["Income_Q3-Q1"] = Variable_KS_shp@data["Income_Q3"]-Variable_KS_shp@data["Income_Q1"]
+# Variable_KS_df["Income_Q3-Q1"] = Variable_KS_df["Income_Q3"]-Variable_KS_df["Income_Q1"]
 
 # *new X ####
 col_X = 
@@ -78,24 +85,30 @@ col_X =
 # cor ####
 
 corr = cor(Variable_KS_df[c(col_y,col_X)])
-col_income = c( "Income_mea","Income_med" ,"Income_Q3-Q1",  "Income_sta", "Income_CV")
-corr_income = cor(Variable_KS_df[c(col_y,col_income)])
 idx = abs(corr[,'Nt'])>.15
 col_X_02 = names(corr[idx,'Nt']) %>% tail(-1)
 
 
-# GWPCA 處理共縣性問題 ####
+# GWPCA 處理共縣性問題(還沒處理完) ####
 
 DM<-gw.dist(dp.locat=data.matrix(((Variable_KS_df[c('X', "Y")]))))
+formula_Nt = Nt ~.
 
-
-bw.gwpca.basic <-  # 25
-  bw.gwpca(Variable_KS_shp, vars = col_X_02, k =3, robust = FALSE, adaptive = TRUE, dMat = DM)
+bw.gwpca.basic <-  # 36
+  bw.gwpca(Variable_KS_shp, vars = col_X_02, k =7, robust = FALSE, adaptive = TRUE, dMat = DM)
 
 gwpca.basic <- gwpca(Variable_KS_shp,
                      vars = col_X_02, bw = bw.gwpca.basic, k = 3, robust = FALSE, adaptive = TRUE)
 
+gwpca.basic$loadings[2,,]
 
-# bw.gwpca.robust <-
-# bw.gwpca(Variable_KS_shp, vars = col_X_02, k = 3, robust = TRUE, adaptive = TRUE, dMat = DM )
-
+# GWPCA 處理共縣性問題 ####
+formula.GWPR = Nt ~.
+DM<-gw.dist(dp.locat=data.matrix(((Variable_KS_df[c('X', "Y")]))))
+bw <- bw.ggwr(formula.GWPR,  
+              data = Variable_KS_shp[c(col_X_02, col_y)],
+              family = "poisson",
+              approach = "AICc",
+              kernel = "gaussian", 
+              adaptive = TRUE,
+              dMat = DM )
