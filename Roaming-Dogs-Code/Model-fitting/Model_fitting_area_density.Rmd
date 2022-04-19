@@ -1,0 +1,298 @@
+---
+title: "Model Fitting"
+output: html_document
+---
+## Referance
+- http://idata8.com/rpackage/GWmodel/00Index.html (GWmodel 的函數簡單說明)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## library the packages
+
+
+
+```{r}
+library(GWmodel)      ### GW models
+library(dplyr)
+library(sp)           ## Data management
+library(car)          ## vif
+library(spdep)        ## Spatial autocorrelation
+library(RColorBrewer) ## Visualization
+library(classInt)     ## Class intervals
+library(raster)       ## spatial data
+library(grid)         # plot
+library(gridExtra)    # Multiple plot
+library(ggplot2)      # Multiple plot
+library(gtable)
+library(GGally)       # 相關係數圖矩陣（scatter plot matrix）
+library(maptools)
+library(MASS)
+library(tmap)
+```
+
+## Function 
+
+### pdf_Plot
+
+```{r pdf_Plot}
+pdf_plot <- function(x){
+  g = ggplot()+
+    geom_histogram(aes(x = x, y = ..density..), 
+                   fill = '#557C55', alpha = 0.8)+
+    geom_density(aes(x = x, y = ..density..), 
+                 color = '#062C30', size = 1)+
+    theme_bw()
+  return(g)
+}
+```
+
+### Point_Plot
+
+```{r pdf_Plot}
+point_plot <- function(x){
+  g = ggplot()+
+    geom_point(aes(x = Variable_df$X, y = Variable_df$Y, color = x, size = x))+
+     scale_colour_gradient(low = "#83BD75", high = "#1A3C40")+
+    theme_bw()
+  
+  return(g)
+}
+```
+
+## Load and tidy data
+
+分層：依照人口密度、農業人口比例、專科以上人口比例及老年人口比例等變數，以群分析（Kmeans）作為都市化程度分層依據分為二至四層。
+
+```{r Load data}
+getwd()
+```
+
+```{r Load data}
+path = '..\\..\\Roaming-Dogs-Data\\'
+
+# Variable_df <- read.csv(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ), fileEncoding = 'utf-8')
+Variable_shp<-shapefile(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ),encoding = 'utf-8')
+Variable_shp@data["School"] <- rowSums(Variable_shp@data[c("Ele","Junior" ,"Senior")])
+Variable_shp@data[is.na(Variable_shp@data)] <- 0
+
+Variable_shp@data$Nr = Variable_shp@data$Nr %>% as.integer()
+Variable_df = Variable_shp@data
+```
+
+```{r Varaible name 01 original}
+col_X = 
+  c( "Cluster", # 分群
+     "Hospital","Clinic", "Temple", "Ele","Junior" ,"Senior", "Train.stat", # 公共建設
+     "Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow", # 人流
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta") # 村里收入
+```
+
+- 因為分群包含教育程度、老年人口比例與人口密度等資訊，因此將其相關變數去除。
+- 因為里裡面的學生人數與扶幼率有極大正相關，因此使用扶幼率。
+- 太多里沒有醫院，與之去除
+```{r}
+col_X = 
+  c( "Cluster", # 分群
+     "Clinic", "Temple", "School" ,"Train.stat", # 公共建設
+     "Train.crow", # 人流
+      "M_F_RAT" ,"YOUN_DEP", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta") # 村里收入
+
+
+col_y = c('Nr')
+```
+
+```{r}
+pdf_plot(Variable_df$Clinic) 
+point_plot(Variable_df$Clinic)
+sum(Variable_df$Clinic == 0)/ length(Variable_df$Clinic)
+```
+
+```{r 轉成數值}
+for(i in c(col_X, col_y, "P_CNT")){
+  
+  Variable_shp@data[i] = sapply(Variable_shp@data[i], function(x) as.numeric(x))
+  Variable_df[i] = sapply(Variable_df[i], function(x) as.numeric(x))
+}
+```
+
+### 轉成密度(公共建設分母為人口，遊蕩犬分母為面積)
+```{r 轉成密度}
+for(i in c( "Temple",  "School", "Train.stat",  "Clinic","Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow")){
+  
+  i_new = paste0(i, "_den")
+
+  Variable_shp@data[i_new] = Variable_shp@data[i]/Variable_shp@data$P_CNT
+  Variable_df[i_new] = Variable_df[i]/Variable_df$P_CNT
+}
+Variable_shp@data["Nr_den"] = Variable_shp@data["Nr"]/Variable_shp@data$Area_sqkm
+Variable_df["Nr_den"] = Variable_df["Nr"]/Variable_df$Area_sqkm
+```
+
+
+
+
+```{r Varaible name 02}
+col_X = 
+  c( "Temple_den",  "School_den", "Train.stat_den",  "Clinic_den", # 公共建設
+     "Train.crow_den", 
+     "M_F_RAT",  "YOUN_DEP", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta")
+col_y= c('Nr')
+col_y_den =c('Nr_den')
+```
+
+### Scale the Data
+```{r scale the data}
+
+# for (i in col_X[col_X != "Cluster"]){
+# 
+#     Variable_df[i] <- scale(Variable_df[i])
+#     Variable_shp@data[i] <-scale(Variable_shp@data[i])
+# 
+# }
+```
+
+```{r Nr_den pdf}
+idx_clu_1 = Variable_df$Cluster == 1
+sum(Variable_df$Nr[!idx_clu_1]==0)/sum(!idx_clu_1); sum(Variable_df$Nr[idx_clu_1]==0)/sum(idx_clu_1); sum(Variable_df$Nr==0)/nrow(Variable_df)
+pdf_plot(Variable_df$Nr[!idx_clu_1])+xlab("density of Nr(Cluster is 2,3,4 都市化較低)")
+pdf_plot(Variable_df$Nr[idx_clu_1])+xlab("density of Nr (Cluster is 1 都市化較高)")
+```
+
+
+## Correlation
+```{r correlation Cluster == 1}
+corr = cor(Variable_df[idx_clu_1,c(col_y, col_y_den,col_X)])
+idx = abs(corr[,col_y_den])>.05 | abs(corr[,col_y])>.05
+col_X_den = c("Temple_den",  "School_den", "Train.stat_den",  "Clinic_den")
+corr[col_X_den,col_X_den]
+col_X_02 = names(corr[idx,col_y_den]) %>% tail(-2)
+
+corr[idx,idx]
+```
+```{r scatter plot}
+
+ggpairs(Variable_df, columns =c(col_X_02,col_y_den)) 
+
+```
+
+```{r correlation Cluster != 1}
+corr = cor(Variable_df[!idx_clu_1,c(col_y, col_y_den,col_X)])
+idx = abs(corr[,col_y_den])>.1 | abs(corr[,col_y])>.1
+col_X_den = c("Temple_den",  "School_den", "Train.stat_den",  "Clinic_den")
+corr[col_X_den,col_X_den]
+col_X_02 = names(corr[idx,col_y_den]) %>% tail(-1)
+
+corr[idx,idx]
+```
+
+
+```{r scatter plot}
+
+ggpairs(Variable_df, columns =c(col_X_02,col_y)) 
+
+```
+
+## Global PCA 
+
+- 沒有考慮地理加權
+
+```{r}
+data = Variable_df[c(col_X_02,col_y)]
+class(data)
+
+pca <- prcomp(~.,  #選擇變數 
+              data = Variable_df[c(col_X_02)],  # 資料
+              scale = TRUE)                          # 正規化資料
+```
+
+### 陡坡圖(Scree plot)-凱莎原則
+
+```{r Scree Plot for PCA}
+plot(pca,         # 放pca
+     type="line", # 用直線連結每個點
+     main="Scree Plot for PCA") # 主標題
+```
+
+### 累積解釋圖(Pareto plot)
+
+從pca中取出標準差(pca$sdev)後再平方，計算variance(特徵值)
+
+```{r Pareto plot}
+
+# 從pca中取出標準差(pca$sdev)後再平方，計算variance(特徵值)
+vars <- (pca$sdev)^2  
+
+# 計算每個主成分的解釋比例 = 各個主成分的特徵值/總特徵值
+props <- vars / sum(vars) 
+
+print(props)
+
+# 累加前n個元素的值
+cumulative.props <- cumsum(props)  # 累加前n個元素的值
+cumulative.props
+
+ggplot()+
+  geom_point(aes(x = c(1:length(cumulative.props)), y = cumulative.props))+
+  ggtitle("累積解釋圖")
+```
+
+### New Variable
+
+```{r }
+col_PC = c()
+
+for(i in c(1:4)){
+  col_PC[i] = paste0("PC",i)
+  Variable_shp@data[paste0("PC",i)] <- pca$x[, i]
+  Variable_df[paste0("PC",i)] <- pca$x[, i]
+}
+```
+
+
+
+
+## GLM_Poisson 
+先只用各里寺廟、學校、診所密度與男女比、里平均收入建模
+```{r}
+col_X_03 = c("Temple_den",  "School_den", "Clinic_den","M_F_RAT", "Income_mea")
+off = log(Variable_df$Area_sqkm)
+glm.poi <- glm(Nr ~ ., offset = off, family = poisson(link = "log"), data = Variable_df[c(col_y, col_X_03)])
+summary(glm.poi); jtools::summ(glm.poi, digits = 6, confint = TRUE, exp = TRUE)
+```
+
+```{r}
+point_plot(Variable_df$Nr)
+```
+
+```{r}
+residual_df = data.frame(VILLCODE = Variable_df$VILLCODE,
+                         COUNTYNAME = Variable_df$COUNTYNAME,
+                         TOWNNAME = Variable_df$TOWNNAME,
+                         VILLNAME = Variable_df$VILLNAME,
+                         glm.poi.res = glm.poi$residuals)
+```
+
+## GWPR
+```{r}
+col_X_03 = c("M_F_RAT", "Income_mea")
+off = log(Variable_df$Area_sqkm)
+f = Nr~.
+```
+
+```{r}
+DM<-gw.dist(dp.locat=data.matrix(((Variable_df[c('X', "Y")]))))
+
+bw.gwr <- bw.ggwr(f,  
+                 data = Variable_shp[c(col_X_03, col_y)],
+                 family = "poisson",
+                 approach = "AICc",
+                 kernel = "gaussian", 
+                 adaptive = TRUE,
+                 dMat = DM )
+bw.gwr
+```

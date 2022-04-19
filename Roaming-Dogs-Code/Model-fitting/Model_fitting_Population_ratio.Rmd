@@ -30,6 +30,12 @@ library(GGally)       # 相關係數圖矩陣（scatter plot matrix）
 library(maptools)
 library(MASS)
 library(tmap)
+library(glmnet)      # For Lasso and Ridge
+## ggplot for glmnet
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(ggrepel)
 ```
 
 ## Function 
@@ -48,6 +54,18 @@ pdf_plot <- function(x){
   
   return(g)
 }
+```
+
+```{r}
+
+coeff2dt <- function(fitobject, s) {
+  coeffs <- coef(fitobject, s) 
+  coeffs.dt <- data.frame(name = coeffs@Dimnames[[1]][coeffs@i + 1], coefficient = coeffs@x) 
+
+  # reorder the variables in term of coefficients
+  return(coeffs.dt[order(coeffs.dt$coefficient, decreasing = T),])
+}
+
 ```
 
 ## Load and tidy data
@@ -79,7 +97,7 @@ col_X =
      "Hospital","Clinic", "Temple", "Ele","Junior" ,"Senior", "Train.stat", # 公共建設
      "Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow", # 人流
      "high_rat",   "mid_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
-     "Income_mea","Income_sta") # 村里收入
+     "Income_mea","Income_sta","P_CNT") # 村里收入
 col_y = c('Nr')
 ```
 
@@ -93,7 +111,7 @@ for(i in c(col_X, col_y)){
 
 ### 轉成密度
 ```{r 轉成密度}
-for(i in c('Hospital',  "Temple",  "Ele" ,"Junior" ,"Senior", "Train.stat",  "Clinic","Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow", "Nr")){
+for(i in c('Hospital',  "Temple",  "Ele" ,"Junior" ,"Senior", "Train.stat",  "Clinic","Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow")){
   
   i_new = paste0(i, "_den")
 
@@ -114,7 +132,7 @@ col_X =
      "Ele_stu_den" ,   "Junior_stu_den" ,"Senior_stu_den", "Train.crow_den",
      "high_rat","low_rat", "M_F_RAT" , "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
      "Income_mea","Income_sta")
-col_y= c('Nr_den')
+col_y= c('Nr')
 ```
 
 ### Scale the Data
@@ -131,11 +149,11 @@ for (i in col_X[col_X != "Cluster"]){
 ```
 
 ```{r}
-arrange(Variable_df[c("COUNTYNAME","TOWNNAME","VILLNAME",col_y)], Nr_den)
+arrange(Variable_df[c("COUNTYNAME","TOWNNAME","VILLNAME",col_y)], Nr)
 ```
 
 ```{r Nr_den pdf}
-pdf_plot(log(Variable_df$Nr_den+1))+xlab("log the density of Nr")
+pdf_plot((Variable_df$Nr+1))+xlab("log the density of Nr")
 ```
 
 
@@ -210,28 +228,97 @@ for(i in c(1:4)){
 }
 ```
 
-## lm
-- (https://francish.netlify.app/post/poisson-and-negative-binomial-regression-using-r/)
-```{r}
 
-lm.model <- lm(log(Nr_den+1)~., data = Variable_df[c(col_PC, col_y)]) #negative binomial
-summary(lm.model)
+-- PCA 先慢著用，先用 LASSO 或者Ridge 試試看 ------
+
+## GLM possion with Ridge
+- https://stats.stackexchange.com/questions/232666/should-i-use-an-offset-for-my-poisson-glm
+- https://stats.stackexchange.com/questions/11182/when-to-use-an-offset-in-a-poisson-regression
+- https://core.ac.uk/download/pdf/6656887.pdf
+
+
+由于是發生數 case 服從 poisson 分布，而不是比例（密度）服從，所以最后以下方算是呈現：
+$$
+log(E(Y|x)) = log(exposure)+\theta'x
+$$
+證明：
+$$
+log(E(Y|x))-log(exposure) = log(\frac{E(Y|x)}{exposure}) = \theta'x
+$$
+
+### offset is area
+```{r}
+f = Nr~.
+glm_po = glm(f,data = Variable_df[c(col_X_02, "Nr", "Area_sqkm")], family=poisson(link=log), offset = log(Area_sqkm) )
 ```
-```{r pdf_plot: nb regression residual}
-pdf_plot(lm.model$residuals)
+
+```{r}
+summary(glm_po)
+pdf_plot(glm_po$residuals)
 ```
+
 ```{r pdf_plot nb--regression residual scatter plot}
 ggplot(Variable_df)+
-  geom_point(aes(x = X, y = Y, color = lm.model$residuals))
+  geom_point(aes(x = X, y = Y, color = glm_po$residuals))
 ```
 
-# Moran's I 檢定
+### ridge and offset is Area
 ```{r}
-dists <- as.matrix(dist(cbind(Variable_df$X, Variable_df$Y)))
-dists.inv <- 1/dists
-diag(dists.inv) <- 0
-ape::Moran.I( lm.model$residuals, dists.inv, scaled = FALSE, na.rm = T,
-          alternative = "two.sided")
+set.seed(12345) # reproducible random numbers
+X = Variable_df[col_X_02] %>% data.matrix(); y = Variable_df[col_y] %>% data.matrix(); off = Variable_df$Area_sqkm %>% log
+cvfit = cv.glmnet(X, y, offset = off, family = "poisson", alpha = 0)
+
+plot(cvfit)
+```
+
+
+### Ridge's Coefficients
+```{r}
+plot(cvfit$glmnet.fit,xvar ="lambda", label = T) 
+```
+```{r}
+coef(cvfit, s = "lambda.min"); lambda.min = (cvfit$lambda.min)
+coeffs.table <- coeff2dt(fitobject = cvfit, s = "lambda.min")
+ggplot(data = coeffs.table) +
+  geom_col(aes(x = name, y = coefficient, fill = {coefficient > 0})) +
+  xlab(label = "") +
+  ggtitle(paste("Lasso Coefficients with lambda",round(lambda.min,4))) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") 
+```
+
+```{r}
+betas = as.matrix(cvfit$glmnet.fit$beta)
+lambdas = cvfit$lambda
+names(lambdas) = colnames(betas)
+
+as.data.frame(betas) %>% 
+tibble::rownames_to_column("variable") %>% 
+pivot_longer(-variable) %>% 
+mutate(lambda=lambdas[name]) %>% 
+ggplot(aes(x=log(lambda),y=value,col=variable)) + 
+geom_line() + 
+geom_label_repel(data=~subset(.x,lambda==min(lambda)),
+aes(label=variable),nudge_x=-0.5) +
+ylab("Coefficient")+
+geom_vline(aes(xintercept=log(cvfit$lambda.min)), color="#990000", linetype="dashed")+
+theme_bw()#+
+# scale_x_log10()
+```
+
+### offset is population
+```{r}
+f = Nr~.
+glm_po = glm(f,data = Variable_df[c(col_X_02, "Nr", "P_CNT")], family=poisson(link=log), offset = log(P_CNT) )
+```
+```{r}
+summary(glm_po)
+pdf_plot(glm_po$residuals)
+```
+
+```{r pdf_plot nb--regression residual scatter plot}
+ggplot(Variable_df)+
+  geom_point(aes(x = X, y = Y, color = glm_po$residuals))
 ```
 
 ## GWR-Possion
@@ -310,3 +397,5 @@ plot(Ridge.Poi)
 Ridge.Poi.cv<-cv.glmnet(x=X,y=y,family="poisson",alpha=0,nfolds = 10)
 plot(Ridge.Poisson)
 ```
+
+
