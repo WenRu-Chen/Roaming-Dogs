@@ -1,0 +1,250 @@
+---
+title: "MVT vs. MVN random field differences"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+---
+
+In this document we will simulate some data that comes from a MVT random field model and then fit models that allow for the MVT random field or assume the standard MVN Gaussian random field. 
+
+```{r set-knitr-options, cache=FALSE, echo=FALSE}
+library("knitr")
+opts_chunk$set(message=FALSE, fig.width=6, fig.height=5, cache = TRUE, autodep = TRUE)
+```
+
+```{r}
+library(rrfields)
+library(dplyr)
+library(ggplot2)
+library(rstan)
+library(bayesplot)
+```
+
+Let's initialize some argument and parameter values that we will use throughout.
+
+```{r setup}
+options(mc.cores = parallel::detectCores())
+ITER <- 500
+CHAINS <- 2
+SEED <- 42131
+gp_sigma <- 0.3
+sigma <- 0.8
+df <- 2
+gp_theta <- 1.2
+n_draws <- 16
+nknots <- 12
+```
+
+Let's simulate some data that has heavy tails. 
+
+```{r simulate-data}
+set.seed(SEED)
+s <- sim_rrfield(df = df, n_draws = n_draws, gp_theta = gp_theta,
+  gp_sigma = gp_sigma, sd_obs = sigma, n_knots = nknots)
+print(s$plot)
+```
+
+We set the degrees of freedom parameter to 2. This represents data with some very heavy tails. Each of the above panels refers to a different slice of time. We can see that some time slices have some very extreme spatial patterns where the peaks and valleys are quite large. Time slices would be more similar to each other if the degrees of freedom parameter were larger. 
+
+Let's fit a model where we estimate the degrees of freedom parameter. 
+
+```{r, message=FALSE, results=FALSE, message=FALSE}
+m1 <- rrfield(y ~ 0, data = s$dat, time = "time",
+  lat = "lat", lon = "lon", nknots = nknots, fixed_df_value = 1,
+  iter = ITER, chains = CHAINS, estimate_df = TRUE, save_log_lik = TRUE)
+print(m1)
+```
+
+So we have recovered the degrees of freedom parameter. 
+
+Let's look at the coverage of our correct model. 
+
+```{r}
+p <- predict(m1, interval = "confidence", type = "response")
+pp <- predict(m1, interval = "prediction", type = "response")
+(coverage <- mean(s$dat$y > pp$conf_low & s$dat$y < pp$conf_high) %>% round(3))
+```
+
+The coverage of our prediction intervals is approximately correct. 
+
+Now let's fit a model where we force the random field to be multivariate normal by fixing the degrees of freedom parameter at a large value. 
+
+```{r, message=FALSE, results=FALSE, message=FALSE}
+m_wrong <- rrfield(y ~ 0, data = s$dat, time = "time",
+  lat = "lat", lon = "lon", nknots = nknots,
+  iter = ITER, chains = CHAINS,
+  estimate_df = FALSE, fixed_df_value = 2000, save_log_lik = TRUE)
+print(m_wrong)
+```
+
+Let's look at the difference between the parameter estimates.
+
+```{r}
+pars <- c("df[1]", "gp_sigma", "sigma[1]", "gp_theta")
+mm <- as.matrix(m1$model)
+p1 <- mcmc_areas(mm, pars = pars) + xlim(0, 5)
+
+pars <- c("gp_sigma", "sigma[1]", "gp_theta")
+mm_wrong <- as.matrix(m_wrong$model)
+p2 <- mcmc_areas(mm_wrong, pars = pars) + xlim(0, 5)
+
+gridExtra::grid.arrange(p1, p2)
+```
+
+So to compensate, the MVN model (the mismatched model; the one on the bottom), has allowed the gp_sigma parameter to inflate. This parameter controls the magnitude of the spatial deviations.
+
+Let's calculate the same credible intervals for the mismatched model. 
+
+```{r}
+p_wrong <- predict(m_wrong, interval = "confidence", type = "response")
+pp_wrong <- predict(m_wrong, interval = "prediction", type = "response")
+
+mean(s$dat$y > pp_wrong$conf_low & s$dat$y < pp_wrong$conf_high) %>% round(3)
+```
+
+So coverage isn't a problem. It is also approximately correct for the mismatched model. We will see that the model generates similar coverage by inflating the credible intervals in order to make up for poorer prediction when the models are mismatched. 
+
+Let's look at the ratio of the credible interval widths. The objects starting with `p` contain the credible intervals on the mean and the objects starting with `pp` contain the prediction credible intervals (i.e. posterior predictive checks).
+
+```{r}
+cis_wrong <- p_wrong$conf_high - p_wrong$conf_low
+cis <- p$conf_high - p$conf_low
+
+ggplot(data.frame(y = s$dat$y, cis = cis, ratio = exp(log(cis_wrong) - log(cis)), 
+  time = as.factor(s$dat$time)), 
+  aes(as.factor(time), ratio)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 1, lty = 2) +
+  coord_flip() +
+  ylab("Ratio of credible intervals (mismatched model / correct model)")
+
+ggplot(data.frame(y = s$dat$y, cis = cis, ratio = (cis_wrong / cis), 
+  time = as.factor(s$dat$time)), 
+  aes(ratio)) +
+  geom_histogram() +
+  geom_vline(xintercept = 1, lty = 2) +
+  ylab("Ratio of credible intervals (mismatched model / correct model)")
+
+mean(cis_wrong / cis)
+median(cis_wrong / cis)
+```
+
+So here we can see that the credible intervals are considerably wider for the mismatched model.
+
+Now let's combine the predictions to compare them:
+
+```{r}
+d <- data.frame(s$dat, p)
+d_wrong <- data.frame(s$dat, p_wrong)
+d_combined <- data.frame(d, select(d_wrong, estimate) %>% rename(est_wrong = estimate))
+```
+
+Let's graphically look at the coverage of the 2 models. We will show the first 15 points in each time slice. 
+
+```{r, fig.width=7, fig.height=7}
+proj <- reshape2::melt(s$proj)
+names(proj) <- c("time", "pt", "proj")
+proj <- dplyr::arrange_(proj, "time", "pt")
+
+d2 <- data.frame(d_combined, proj = proj$proj)
+d2 <- data.frame(d2, rename(d_wrong, conf_low_wrong = conf_low, conf_high_wrong = conf_high) %>% 
+    select(conf_low_wrong, conf_high_wrong))
+jitter <- 0.25
+
+filter(d2, pt %in% 1:15) %>%
+  ggplot(aes(x = conf_low, xend = conf_high, y = pt+jitter, yend = pt+jitter)) +
+  geom_segment(alpha = 0.5) +
+  geom_segment(aes(x = conf_low_wrong, xend = conf_high_wrong, 
+    y = pt-jitter, yend = pt-jitter), alpha = 0.5, colour = "red") +
+  geom_point(aes(x = proj, y = pt)) +
+  geom_point(aes(x = estimate, y = pt+jitter), pch = 4) +
+  geom_point(aes(x = est_wrong, y = pt-jitter), colour = "red", pch = 4) +
+  facet_wrap(~ time, scales = "free_x") + theme_light() +
+  xlab("y") + ylab("Point ID")
+```
+
+So in the above figure, the black circles are the true values and the x's and horizontal lines represent the median model estimates and 95% credible intervals. The black lines represent the correct MVT model and the red represents the mismatched MVN model. 
+
+In order to capture the time slices with big changes in the spatial pattern, the MVN model increases the gp_sigma parameter, which means that years with more normal special deviations are estimated as being overly variable. The credible intervals become larger as well. For example, look at the larger deviations in panel 13. In this time slice the mismatched model overestimates how large the largest deviations are and "compensates" with larger credible intervals.
+
+Let's look at the root mean squared error for the 2 models.
+
+```{r}
+ms1 <- group_by(d2, time) %>%
+  summarize(rmse_wrong = sqrt(mean((est_wrong - proj) ^ 2)),
+  rmse = sqrt(mean((estimate - proj) ^ 2)))
+ 
+d2 %>%
+  summarize(rmse_wrong = sqrt(mean((est_wrong - proj) ^ 2)),
+  rmse = sqrt(mean((estimate - proj) ^ 2)))
+
+ggplot(ms1, aes(time, rmse)) +
+  geom_line() +
+  geom_line(aes(y = rmse_wrong), col = "red")
+```
+
+So the multivariate model almost always has the same or higher root mean square error.
+
+We can look at the leave-one-out information criteria to compare the models.
+
+```{r}
+library(loo)
+loo_t <- loo(extract_log_lik(m1$model))
+loo_n <- loo(extract_log_lik(m_wrong$model))
+loo_t$looic
+loo_n$looic
+```
+
+Indeed the leave one out information criteria favors the correct MVT model here.
+
+Let's try the log predictive posterior distribution:
+
+```{r}
+p <- predict(m1, interval = "confidence", conf_level = 0.95,
+  type = "link", newdata = s$dat, return_mcmc = TRUE)
+pn <- predict(m_wrong, interval = "confidence", conf_level = 0.95,
+  type = "link", newdata = s$dat, return_mcmc = TRUE)
+sigma <- extract(m1$model)$sigma
+sigman <- extract(m_wrong$model)$sigma
+
+# p <- filter(p, hold_out)
+# pn <- filter(pn, hold_out)
+# holdout_data <- filter(d, hold_out)
+
+holdout_data <- s$dat
+
+scores <- matrix(0, nrow = nrow(p), ncol = ncol(p))
+for(draw in seq_len(ncol(p))){
+  scores[, draw] <- dnorm(holdout_data$y,
+    mean = p[, draw], sd = sigma[draw], log = F)
+}
+
+scoresn <- matrix(0, nrow = nrow(p), ncol = ncol(p))
+for(draw in seq_len(ncol(pn))){
+  scoresn[, draw] <- dnorm(holdout_data$y,
+    mean = pn[, draw], sd = sigman[draw], log = F)
+}
+
+s1 <- mean(log(rowMeans(scores)))
+s2 <- mean(log(rowMeans(scoresn)))
+(s1-s2)/s2 * 100
+exp(s1)
+exp(s2)
+(exp(s1)-exp(s2))/exp(s2) * 100
+
+
+# sc <- data.frame(lp = apply(scores, 2, sum), model = "mvt")
+# sc2 <- data.frame(lp = apply(scoresn, 2, sum), model = "mvn")
+# sc <- bind_rows(sc, sc2)
+
+ggplot(sc, aes(lp)) +
+  geom_histogram(fill = "red", alpha = 0.5) +
+  geom_histogram(data = sc2, aes(lp), fill = "blue", alpha = 0.5)
+
+sc <- data.frame(lp = log(rowMeans(scores)), model = "mvt")
+sc2 <- data.frame(lp = log(rowMeans(scoresn)), model = "mvn")
+
+ggplot(sc, aes(lp)) +
+  geom_histogram(fill = "red", alpha = 0.5) +
+  geom_histogram(data = sc2, aes(lp), fill = "blue", alpha = 0.5)
+```
+

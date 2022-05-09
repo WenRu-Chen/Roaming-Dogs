@@ -421,7 +421,7 @@ nb.dist2 <- dnearneigh(ncpoint, 0, max)
 nb.dist3 <- dnearneigh(ncpoint, 0, 1.5*max)
 ```
 
-### GLM_poisson with spatial (純粹看不懂) 
+### GLMM_poisson with spatial (純粹看不懂) 
 
 `glmmfields`:
 - https://github.com/seananderson/glmmfields

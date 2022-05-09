@@ -1,0 +1,194 @@
+---
+title: "MVT vs. MVN performance for matched and mismatched models."
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+---
+
+```{r set-knitr-options, cache=FALSE, echo=FALSE}
+library("knitr")
+opts_chunk$set(message=FALSE, fig.width=7, fig.height=5,
+  cache = FALSE, autodep = TRUE)
+```
+
+```{r}
+library(glmmfields)
+library(dplyr)
+library(ggplot2)
+library(rstan)
+```
+
+Let's initialize some argument and parameter values that we will use
+throughout.
+
+```{r setup}
+set.seed(123)
+options(mc.cores = parallel::detectCores())
+CHAINS <- 4
+SEED <- 123
+gp_sigma <- 0.3
+sigma <- 0.8
+df <- 2
+gp_theta <- 1.2
+n_draws <- 15
+nknots <- 10
+```
+
+Let's simulate some data that has heavy tails, fit correct and mismatched
+models, make predictions, and then calculate the root mean squared error
+compared to the true values.
+
+```{r simulate-and-fit-data}
+simulate_and_fit <- function(return_model = FALSE, ITER = 2000,
+  giveup_thresh = 4) {
+
+  print("----------------------------------------------------------")
+  print(i+1)
+  set.seed(i+1)
+  s <- sim_glmmfields(df = df, n_draws = n_draws, gp_theta = gp_theta,
+    gp_sigma = gp_sigma, sd_obs = sigma, n_knots = nknots)
+  d <- s$dat
+  d <- mutate(d, withhold = station_id %in% sample(unique(station_id), 10))
+
+  ess <- 0
+  rhat <- 1e9
+  this_ITER <- ITER
+  giveup <- FALSE
+
+  while((ess <= 100 | rhat > 1.05) & !giveup) {
+    m1 <- glmmfields(y ~ 0, data = filter(d, !withhold),
+      time = "time",
+      lat = "lat", lon = "lon", nknots = nknots,
+      iter = ITER, chains = CHAINS, estimate_df = TRUE, save_log_lik = TRUE,
+      prior_gp_theta = half_t(3, 0, 3),
+      prior_gp_sigma = half_t(3, 0, 3),
+      prior_sigma = half_t(3, 0, 3),
+      control = list(adapt_delta = 0.90))
+
+    m_wrong <- glmmfields(y ~ 0, data = filter(d, !withhold),
+      time = "time",
+      lat = "lat", lon = "lon", nknots = nknots,
+      iter = ITER, chains = CHAINS,
+      estimate_df = FALSE, fixed_df_value = 1e9, save_log_lik = TRUE,
+      prior_gp_theta = half_t(3, 0, 3),
+      prior_gp_sigma = half_t(3, 0, 3),
+      prior_sigma = half_t(3, 0, 3),
+      control = list(adapt_delta = 0.90))
+
+    diag <- broom::tidy(m1$model, rhat = TRUE, ess = TRUE)
+    diagw <- broom::tidy(m_wrong$model, rhat = TRUE, ess = TRUE)
+
+    ess <- min(c(diag$ess, diagw$ess))
+    rhat <- max(c(diag$rhat, diagw$rhat))
+
+    this_ITER <- this_ITER * 2
+    if (this_ITER > ITER * giveup_thresh) giveup <- TRUE
+  }
+
+  p <- predict(m1, interval = "confidence", type = "response",
+    newdata = d)
+  p_wrong <- predict(m_wrong, interval = "confidence", type = "response",
+    newdata = d)
+
+  loo_t <- loo(m1)$estimates["looic", "Estimate"]
+  loo_n <- loo(m_wrong)$estimates["looic", "Estimate"]
+
+  i <<- i + 1
+  r <- list(i = i, dat = d, p = p, p_wrong = p_wrong, ess = ess, rhat = rhat, giveup = giveup,
+    loo_t = loo_t, loo_n = loo_n, proj = s$proj)
+  if (return_model) r <- list(r, m = m1, m_wrong = m_wrong)
+}
+```
+
+Now let's run our function a number of times:
+
+```{r}
+i <<- 0
+if (!file.exists("sim/match-mismatch.rds")) {
+  output <- plyr::rlply(.n = 100, function(x) simulate_and_fit(ITER = 500, giveup_thresh = 1))
+  saveRDS(output, "sim/match-mismatch.rds")
+} else {
+  output <- readRDS("sim/match-mismatch.rds")
+}
+
+i <<- 200
+if (!file.exists("sim/match-mismatch2.rds")) {
+  output2 <- plyr::rlply(.n = 50, function(x) simulate_and_fit(ITER = 500, giveup_thresh = 1))
+  saveRDS(output2, "sim/match-mismatch2.rds")
+} else {
+  output2 <- readRDS("sim/match-mismatch2.rds")
+}
+```
+
+```{r}
+output <- c(output, output2)
+if (!file.exists("sim/match-mismatch-rmse.rds")) {
+  rmse <- plyr::ldply(output, function(x) {
+    p <- x$p
+    p_wrong <- x$p_wrong
+    proj <- reshape2::melt(x$proj)
+    names(proj) <- c("time", "pt", "proj")
+    proj <- dplyr::arrange_(proj, "time", "pt")
+
+    assertthat::assert_that(identical(proj[,1:2], x$dat[,1:2]))
+
+    d <- data.frame(x$dat, p)
+    d_wrong <- data.frame(x$dat, p_wrong)
+    d_combined <- data.frame(d,
+      select(d_wrong, estimate, conf_high, conf_low) %>%
+        rename(est_wrong = estimate,
+          conf_high_wrong = conf_high, conf_low_wrong = conf_low))
+
+    assertthat::assert_that(identical(proj[,1:2], d_combined[,1:2]))
+    d2 <- data.frame(d_combined, proj = proj$proj)
+
+    d2 %>%
+      filter(withhold) %>%
+      mutate(
+        sq_error = (estimate - proj)^2,
+        sq_error_wrong = (est_wrong - proj)^2,
+        conf_width = conf_high - conf_low,
+        conf_width_wrong = conf_high_wrong - conf_low_wrong) %>%
+      summarize(
+        rmse = sqrt(mean(sq_error)),
+        rmse_wrong = sqrt(mean(sq_error_wrong)),
+        median_conf_width = median(conf_width),
+        median_conf_width_wrong = median(conf_width_wrong)) %>%
+      mutate(i = i) %>%
+      mutate(perc_better = (rmse_wrong - rmse) / rmse * 100) %>%
+      mutate(perc_better_ci =
+          (median_conf_width_wrong - median_conf_width) / median_conf_width * 100)
+  })
+  saveRDS(rmse, file = "sim/match-mismatch-rmse.rds")
+} else {
+  rmse <- readRDS("sim/match-mismatch-rmse.rds")
+}
+```
+
+What about leave-one-out information criteria?
+
+```{r}
+loo <- plyr::ldply(output, function(x) {
+  loo_t <- x$loo_t
+  loo_n <- x$loo_n
+  data.frame(loo_t = loo_t$looic, loo_n = loo_n$looic, i = x$i)
+})
+loo <- loo %>% mutate(delta_loo = loo_t - loo_n)
+saveRDS(loo, file = "sim/match-mismatch-loo.rds")
+loo <- readRDS("sim/match-mismatch-loo.rds")
+hist(loo$delta_loo)
+mean(loo$delta_loo)
+```
+
+Extract parameter estimates:
+
+```{r}
+CHAINS <- 4
+n_draws <- 20
+i <<- 4 # affects seed
+o <- simulate_and_fit(return_model = TRUE, ITER = 2000)
+o$m_wrong
+o$m
+e1 <- rstan::extract(o$m$model)
+e2 <- rstan::extract(o$m_wrong$model)
+save(e1, e2, file = "sim/match-mismatch-example.rda")
+```

@@ -1,0 +1,688 @@
+% [ ] It appears your manuscript was prepared using LaTeX.  In addition to supplying
+% your paper as a PDF, please also include a ZIP file containing the LaTeX source
+% files used to create your PDF.
+%
+% [x] List the Corresponding Author's email on the title page.
+%
+% [x] List the Running Head on the title page.
+%
+% [ ] Obtain DOIs from Zenodo and CRAN for the code, data, and R package associated
+% with this paper.  Remove the text on lines 280-283 of the Acknowledgments that
+% points to this material.  Instead, insert reference to the Zenodo and CRAN DOIs
+% in a Data Availability statement that follows the Literature Citations.  (For an
+% example please see:
+% https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.2165.)
+% Data and code associated with this study are available from Zenodo: https://doi.org/10.5281/zenodo.1146732.
+%
+% [x] Appendix S1 must be uploaded as a separate file, using Supporting Information
+% as the online file type.  Note that equation numbering should begin anew in the
+% appendix, beginning with Eq. S1.  The appendix must also include a full
+% Literature Citations section for any references found therein.
+%
+% [x] In the main text, refer to both the appendix and the item within for HTML
+% linking purposes (ie: "Appendix S1: Table S1" rather than only "Table S1").
+%
+% [x] Line 245 of the main text refers to Appendix S2, however there is no such file
+% with the current version of your paper.  I see the original submission did
+% include an Appendix S2.  I'm assuming this was mistakenly omitted from your
+% revision?  If so, please be certain to restore this file.  If not, please
+% advise.
+
+\documentclass[12pt,english]{article}
+\usepackage{geometry}
+\geometry{verbose, letterpaper, tmargin = 2.54cm, bmargin = 2.54cm,
+  lmargin = 2.54cm, rmargin = 2.54cm}
+\geometry{letterpaper}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{setspace}
+\usepackage{url}
+\usepackage{lineno}
+\usepackage{xcolor}
+\usepackage{bm}
+\renewcommand\linenumberfont{\normalfont\tiny\sffamily\color{gray}}
+\modulolinenumbers[2]
+\usepackage{booktabs}
+\usepackage{bm}
+\textheight 22.2cm
+
+\providecommand{\tightlist}{%
+\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+%\usepackage[hidelinks]{hyperref}
+\usepackage{nameref}
+
+% Fix line numbering and align environment
+% http://phaseportrait.blogspot.ca/2007/08/lineno-and-amsmath-compatibility.html
+\newcommand*\patchAmsMathEnvironmentForLineno[1]{%
+  \expandafter\let\csname old#1\expandafter\endcsname\csname #1\endcsname
+  \expandafter\let\csname oldend#1\expandafter\endcsname\csname end#1\endcsname
+  \renewenvironment{#1}%
+     {\linenomath\csname old#1\endcsname}%
+     {\csname oldend#1\endcsname\endlinenomath}}%
+\newcommand*\patchBothAmsMathEnvironmentsForLineno[1]{%
+  \patchAmsMathEnvironmentForLineno{#1}%
+  \patchAmsMathEnvironmentForLineno{#1*}}%
+\AtBeginDocument{%
+\patchBothAmsMathEnvironmentsForLineno{equation}%
+\patchBothAmsMathEnvironmentsForLineno{align}%
+\patchBothAmsMathEnvironmentsForLineno{flalign}%
+\patchBothAmsMathEnvironmentsForLineno{alignat}%
+\patchBothAmsMathEnvironmentsForLineno{gather}%
+\patchBothAmsMathEnvironmentsForLineno{multline}%
+}
+
+\hyphenation{glmmfields}
+
+\usepackage{lscape}
+\usepackage{makecell}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\usepackage{ragged2e}
+\setlength{\RaggedRightParindent}{\parindent}
+\usepackage[round,sectionbib]{natbib}
+\bibpunct{(}{)}{,}{a}{}{,}
+\bibliographystyle{ecology}
+
+\usepackage{titlesec}
+\titlespacing*{\section}
+{0pt}{1.5ex plus 1ex minus .2ex}{1.0ex plus .2ex}
+\titlespacing*{\subsection}
+{0pt}{1.5ex plus 1ex minus .2ex}{1.0ex plus .2ex}
+
+% Suppress section numbers
+\makeatletter
+\renewcommand{\@seccntformat}[1]{}
+\makeatother
+
+\title{
+\vspace{-1.4cm}
+Black swans in space: modelling spatiotemporal processes with extremes}
+\author{
+Sean C. Anderson$^{1,2\ast}$ and
+Eric J. Ward$^3$
+}
+\date{}
+
+% refs from Appendix S1:
+\newlabel{fig:didactic}{{S1}{26}{}{figure.1}{}}
+\newlabel{fig:recapture-factorial}{{S2}{27}{}{figure.2}{}}
+\newlabel{tab:packages}{{S1}{28}{}{table.1}{}}
+
+\begin{document}
+
+\maketitle
+
+\noindent
+$^1$School of Aquatic and Fishery Sciences, Box 355020, University of
+Washington, Seattle, WA 98195, USA
+
+\noindent
+$^2$Pacific Biological Station,
+Fisheries and Oceans Canada,
+3190 Hammond Bay Road,
+Nanaimo, BC, V6T 6N7, Canada
+
+\noindent
+$^3$Conservation Biology Division, Northwest Fisheries Science Center, National
+Marine Fisheries Service, National Oceanographic and Atmospheric Administration,
+2725 Montlake Blvd E, Seattle, WA 98112, USA
+
+\noindent
+$^{\ast}$Corresponding author. Present address:
+Pacific Biological Station,
+Fisheries and Oceans Canada,
+3190 Hammond Bay Road,
+Nanaimo, BC, V6T 6N7, Canada\\
+sean.anderson@dfo-mpo.gc.ca
+
+\noindent
+Running head: Spatiotemporal black-swan events
+
+\RaggedRight
+\hyphenpenalty=500
+
+\begin{spacing}{1.8}
+\linenumbers
+
+\input{sim-values}
+
+\begin{abstract}
+
+In ecological systems, extremes can happen
+in time, such as population crashes,
+or in space, such as rapid range contractions.
+However, current methods for
+joint inference about temporal and spatial dynamics
+(e.g.\ spatiotemporal modelling with Gaussian random fields)
+may perform poorly when
+underlying processes include extreme events.
+Here we introduce a model that allows for extremes
+to occur simultaneously in time and space.
+Our model is a Bayesian predictive-process GLMM
+(generalized linear mixed-effects model)
+that uses a multivariate-$t$ distribution to describe spatial random effects.
+The approach is easily implemented with
+our flexible R package \textbf{glmmfields}.
+First, using simulated data,
+we demonstrate the ability to recapture spatiotemporal extremes,
+and explore the consequences of fitting models that ignore such extremes.
+Second, we predict
+tree mortality from mountain pine beetle (\emph{Dendroctonus ponderosae})
+outbreaks in the US Pacific Northwest over the last 16 years.
+We show that our approach provides
+more accurate and precise predictions
+compared to traditional spatiotemporal models
+when extremes are present.
+Our R package makes these models
+accessible to a wide range of ecologists
+and scientists in other disciplines interested in
+fitting spatiotemporal GLMMs, with and without extremes.
+\end{abstract}
+
+\section{Introduction}
+
+Applications of statistical models that allow for joint inference about spatial
+and temporal dynamics have advanced rapidly in ecology over the last several
+decades \citep[e.g.][]{bascompte1995, latimer2009, conn2015}. Spatiotemporal
+models have also been widely used in other disciplines, including applications
+to weather, remote sensing, human disease dynamics, and crime
+\citep{cressie2011}. When ecological data are spatially structured, explicitly
+accounting for spatial autocorrelation can improve model predictions and
+inference about parameters of interest \citep[e.g.][]{shelton2014, thorson2015, verhoef2018}.
+
+Including spatial components in statistical models involves extending models
+that most ecologists are familiar with, such as generalized linear
+models (GLMs) or generalized additive models (GAMs). Spatial relationships can
+be included as predictors in models of the mean (e.g. a two-dimensional GAM)
+or can be included in models of the covariance (e.g.\ kriging). Recent
+extensions of these spatial covariance models include modelling spatial
+deviations in GLMs as random effects (Gaussian random fields, GRFs).
+GRFs represent a two-dimensional version of Gaussian
+processes and define the expected value, variance, and covariance of
+random draws from a multivariate normal distribution.
+Examples of these methods in existing R packages include, but are not limited to,
+\textbf{spBayes} \citep{finley2007}, \textbf{INLA} \citep{rue2009}, and
+\textbf{spate} \citep{sigrist2015} (Appendix S1: Table~\ref{tab:packages}).
+
+A limitation of spatial models that use GRFs is that they may perform poorly
+when data include extreme or ``black-swan'' events. Black-swan events refer to
+rare and seemingly improbable events that nonetheless happen --- often with large
+consequences \citep{taleb2007}.
+Recent work has demonstrated the regular occurrence of such events in natural
+and ecological processes \citep[e.g.][]{albeverio2006, ward2007, fey2015, anderson2017}.
+When models describing a spatial process
+also include an observation model, for example, anomalous observations may be
+reconciled by increasing the variance of the observation error (rather than
+attributing these to extremes in the process). Extremes in temporal processes
+have been modelled using a variety of methods in ecology, typically by including
+mixtures of normal and heavy-tailed distributions \citep[e.g.][]{everitt1996,
+  ward2007, thorson2011}. More recently, the Student-$t$ distribution has been
+proposed as a solution to modelling process variation with extremes, or
+black-swan events, in population dynamics \citep{anderson2017}.
+
+Several extensions of GRFs have been proposed to better capture extreme spatial
+events, including max-stable or extreme value theory \citep{davison2012,
+davison2012a}, where quantities of interest include probabilities of exceeding
+some threshold \citep{davis2008}. Other extensions of spatiotemporal models to
+describe extremes include the use of multivariate-$t$ (MVT) spatial random
+fields \citep{roislien2007}. Compared to GRFs, MVT random fields allow for
+increased flexibility in the representation of spatial patterns through time
+while converging on the multivariate normal (MVN) GRFs when appropriate
+\citep{roislien2007}.
+
+In this paper we introduce the use of robust spatial predictive models using the
+MVT distribution, and provide a user-friendly implementation in our R
+package \textbf{glmmfields}. Using simulation testing, we illustrate that the
+MVT model leads to better prediction (greater accuracy, more precision) when the
+spatial process includes heavy-tailed events. As an application to real-world data, we
+apply this model to data on mountain pine beetle (\textit{Dendroctonus
+  ponderosae}) outbreaks in the Pacific Northwest of the United States.
+
+\section{Methods}
+
+We seek to allow for large deviations in an ecological spatial pattern over time
+by extending spatiotemporal predictive process models to use a MVT distribution
+instead of a MVN distribution. Below we describe the form
+of the model as implemented in \textbf{glmmfields}, describe two simulation
+tests exploring model performance, and finally describe the application of our
+model to a data set of mountain pine beetle outbreaks.
+
+\subsection{Predictive process models}
+
+\citet{latimer2009} provide an overview of predictive process models for
+ecologists. For large datasets, estimating spatial random effects at many
+locations may be computationally prohibitive. One solution is to estimate a
+spatial field as correlated random effects at a subset of locations or $m$
+``knots'' \citep[e.g.][]{latimer2009, shelton2014}, where $m < n$, the number of
+data points (Appendix S1: Fig.~\ref{fig:didactic}). The location of the $m$ knots describing a random field can be
+chosen via a clustering algorithm, such as the partitioning around medoids
+algorithm \citep{reynolds2006}. Instead of estimating an unconstrained $m \times
+m$ covariance matrix, a covariance function is specified \emph{a priori} to
+model covariance as a function of distance. Our \textbf{glmmfields} package
+allows for the isotropic squared exponential (Gaussian), exponential, and Matern
+covariance functions; however, anisotropic functions could be included in the
+future. Given estimated random effects at the knot locations and the known
+distance matrix between the knots and observed data, the knot random effects can
+be projected to the locations of the observations
+\citep[][Appendix S1: Fig.~\ref{fig:didactic}]{roislien2007, latimer2009, finley2009}.
+
+As an example, the squared exponential covariance function models the
+correlation between points $i$ and $j$ as $H(\delta_{ij}) = \exp
+\left(- \delta_{ij}^2 / 2 \theta_{\mathrm{GP}} \right)$, where $\delta_{ij}$ is the
+distance between points $i$ and $j$ and $\theta_{\mathrm{GP}}$ controls how steeply correlation
+declines with distance (GP = gaussian process). For a given set of $\delta_{ij}$, large values of $\theta_{\mathrm{GP}}$
+correspond to smooth spatial patterns and small values correspondence to wiggly
+spatial patterns.
+% --- the degree of wiggliness implied by a value of $\theta_{\mathrm{GP}}$
+% depends on the scale of the $\delta_{ij}$.
+The elements of the covariance matrix $\mathbf{\Sigma}$ at the $m$ knot locations are
+then defined as $\mathbf{\Sigma}_{ij}^* = \sigma_{\mathrm{GP}}^2 \exp \left( -\delta_{ij}^2 / 2 \theta_{\mathrm{GP}}
+\right)$ with the spatial variance parameter $\sigma_{\mathrm{GP}}^2$ scaling the amplitude of the spatial
+deviations and the $*$ denoting a symbol referring to the knot locations as opposed to
+the sample locations.
+Following \citet{latimer2009}, we can calculate the covariance matrix
+$\mathbf{\Sigma}_{\left(\mathbf{W}, \mathbf{W^*} \right)}$
+between the spatial random effects $\mathbf{W}$ at the sample locations
+and the realizations of the spatial process $\mathbf{W^*}$ at the knot locations.
+Given
+$\mathbf{\Sigma^*}$, we can generate $\mathbf{W^*}$ by drawing
+from a multivariate distribution (MVN or MVT) with covariance $\mathbf{\Sigma^*}$ and
+projecting these to the data locations as $\mathbf{\Sigma}_{\left( \mathbf{W},\mathbf{W^{*}} \right)}$:
+$\mathbf{W}=\mathbf{\Sigma}_{\left(\mathbf{W},\mathbf{W^*} \right)}^{'} \mathbf{\Sigma}^{*-1}\mathbf{W^*}$.
+
+
+\subsection{MVT random fields}
+
+Our model is essentially a GLMM with a spatiotemporal element described by a MVN
+or MVT random field. We define the mean of location $s$ and time $t$ as
+$\mu_{s,t} \equiv \mathbb{E}(y_{s,t})$. We then define
+$g(\mu_{s,t}) = \mathbf{X}_{s,t} \bm{\beta} +
+\gamma_{s,t},$ where $g$ is a link function, $\mathbf{X}_{s,t}$ represents
+predictors, and $\bm{\beta}$ represents a vector of estimated coefficients. The symbol
+$\gamma_{s,t}$ represents the spatiotemporal process, described below.
+The variance of the observation model depends on the
+chosen error distribution (e.g.\ Gaussian, Poisson, or gamma).
+
+Modifying the MVN spatiotemporal model to the more flexible MVT distribution
+requires estimating the degrees of freedom parameter $\nu$. When $\nu$ is small
+(say $\nu < 10$) the distribution has heavier tails than the MVN
+--- meaning, extreme events are more likely (Fig.~\ref{fig:nu}). For most
+purposes, the MVT and MVN are indistinguishable for moderate values of $\nu$
+(say $\nu > 20$) similarly to the univariate $t$-distribution compared with the
+normal distribution \citep[e.g.][]{anderson2017}. If $W_{s,t}$
+defines the value of a random field at spatial location $s$ and time $t$,
+then the spatiotemporal element $\gamma_{s,t}$ can be
+made temporally constant (one field shared across time, $\gamma_{s,t} = W_{s}$),
+independent at each time step ($\gamma_{s,t} = W_{s,t}$), or autoregressive so
+that the spatial pattern at time $t$ is dependent on the spatial pattern at time
+$t-1$ to a degree defined by $\phi$, ($\gamma_{s,t} = \phi \gamma_{s,t-1} +
+W_{s,t}$).
+
+Our \textbf{glmmfields} package fits these models in a Bayesian framework. We
+sample from the posterior distribution using the No-U-Turn Sampler, which is an
+extension of Hamiltonian Markov Chain Monte Carlo (MCMC), implemented in Stan
+\citep{standevelopmentteam2016a, carpenter2017} and the R package \textbf{rstan}
+\citep{standevelopmentteam2016}. This Bayesian approach has a number of
+advantages. First, it lets us fully quantify uncertainty around all parameter
+estimates and derived quantities (e.g.\ predictions, probabilities of exceeding
+extremes). Second, the Bayesian framework lets us place weakly informative
+priors on parameters to impose our existing knowledge of reasonable values and
+to aid computation. In the case of the degrees of freedom parameter, $\nu$, we
+bound the lower value to $2$ for computational stability and use a gamma(shape = 2, rate = 0.1)
+prior, which has a mean of $20$ and a median of
+about $17$ \citep{juarez2010}.
+
+\subsection{Testing the recovery of spatial extremeness}
+\label{sec:testing-recovery}
+
+We used simulation testing to evaluate how well heavy spatial tails could be
+recovered under various conditions. Our simulations included 50 data points (15
+knots) collected at the same locations annually for 5, 15, or 25 years. The spatial
+process was independent by year ($\gamma_{s,t} = W_{s,t}$) with $\sigma_{\mathrm{GP}}^2 = 1$
+(the spatial variance) and $\theta_{\mathrm{GP}} = 1$ (the spatial correlation parameter).
+We set the MVT $\nu$ parameter to 2.5 (heavy tails), 5 (moderately heavy tails),
+or 20 (effectively normal tails). We then corrupted the ``true'' spatial process
+with observation error, using a gamma distribution with a log link,
+$y_{s,t}\sim
+\mathrm{gamma}\left(\mathrm{shape} = a,
+  \mathrm{rate} = \frac {a}{\mathbb{E}(y_{s,t})} \right)$, where the shape
+parameter $a$ can be re-parameterized into the coefficient of variation (CV),
+$a=\frac{1}{\mathrm{CV}^2}$. We tested CVs of 0.1, 0.6, and 1.2. The underlying
+linear predictor $\mathbf{X_{s,t}} \bm{\beta}$ was set to zero to focus on the
+spatial process. Therefore, the simulation of data $y_{s,t}$ simplifies to
+% \begin{align}
+$\log(\mathbf{\mu_{t}}) \sim \mathrm{MVT}\left(\nu, 0, \mathbf{\Sigma}_{\mathbf{W}}\right),$\\
+\noindent
+$y_{s,t} \sim \mathrm{gamma} \left( \frac{1}{\mathrm{CV}_\mathrm{obs}^2},
+    \frac{1}{\mathrm{CV}_\mathrm{obs}^2 \cdot \mu_{s,t} } \right)$.
+% \end{align}
+We attempted to recover $\nu$ by fitting a model that matched the process
+generating the simulated data. We provide a full description of the priors
+and joint probability distributions along with details of the MCMC
+sampling for this and all other models in Appendix S1.
+
+\subsection{Testing the advantage of allowing for extremes}
+\label{sec:diagnosing}
+
+To evaluate the consequence of assuming spatial processes are not present when
+they actually are, we generated simulated data sets from a model with spatial
+extremes (MVT) and compared the fit of models with and without extremes (MVT
+vs.\ MVN). Specifically, we simulated data from the model:
+$\mathbf{\mu_{t}} \sim \mathrm{MVT}\left(\nu, 0, \mathbf{\Sigma}_{\mathbf{W}}\right)$,
+$y_{s,t} \sim \mathrm{normal}\left(\mu_{s,t},
+  \sigma_{\mathrm{obs}} \right)$,
+with $\sigma_{\mathrm{GP}} = 0.3$ (the scale of the spatial deviations),
+$\theta_{\mathrm{GP}} = 1.2$ (the spatial correlation parameter),
+$\sigma_{\mathrm{obs}} = 0.8$, and 100 spatial data points.
+We set the MVT $\nu$ parameter to 2 to represent very heavy tails.
+The locations of the data, and the knots (15), were held constant through time
+to enable faster computations.
+
+To evaluate out-of-sample predictive accuracy, we withheld 10\% of the data
+randomly (10 points per year) from the model fitting and then compared the MVT
+and MVN models. We compared the root mean squared error between the
+$\log(\hat{\mu}^{\mathrm{withheld}}_{s,t})$ posterior medians and the true
+$\log\left(\mu^{\mathrm{withheld}}_{s,t}\right)$, the width of the 95\% credible
+intervals (CIs) on $\hat{\mu}^{\mathrm{withheld}}_{s,t}$, and the difference in
+the leave-one-out information criteria (LOOIC), a Bayesian
+information criteria that approximates leave-one-out predictive performance
+\citep[][Appendix S1]{vehtari2017}
+
+\subsection{Mountain pine beetles in the US Pacific Northwest}
+\label{sec:beetles-methods}
+
+To illustrate real-world applications of spatial models with extremes, we fit
+MVT and MVN random field models to a data set representing mountain pine beetle
+outbreaks in the US Pacific Northwest from 1994 to 2014
+\citep{usdaforestservice2017}. We rasterized the map into a 500 by 500 grid and
+then aggregated this high-resolution grid into percent cover in a coarser grid
+reduced by a factor of 25.
+We modelled the proportion of finer grid cells affected by outbreaks per coarser
+grid cell.
+We excluded a small number of coarser cells without outbreaks
+since we chose to fit this example with a lognormal observation model for
+simplicity. An alternative, to include the zeros, would be
+a beta-binomial observation model.
+Since the proportion
+affected was far from $1$, we can fit a model with a log link and lognormal
+observation distribution.
+The log of the mean proportion affected at location
+$s$ and time $t$, $\mu_{s,t}$, is predicted by a year-specific random walk
+defined by $\beta_t$, and the spatiotemporal process $\gamma_{s,t}$, with the
+spatial process itself modelled as autoregressive:
+\begin{align} \log(\mu_{s,t}) &= \beta_t + \gamma_{s,t}, \label{eq:beetle-mu} \\
+  \beta_t &\sim \mathrm{normal}\left( \beta_{t-1}, \sigma_{\beta} \right), \\
+  {\gamma}_{t}^{*} &\sim \mathrm{MVT}\left(\nu, \phi {\gamma}_{t-1}^{*}, \mathbf{\Sigma}_{\mathbf{W^*}}\right).
+\end{align}
+
+\noindent We model the data, $y_{s,t}$, as generated by a lognormal
+observation model with scale parameter $\sigma_{\mathrm{obs}}$: $y_{s,t} \sim
+\mathrm{lognormal} \left(  \log(\mu_{s,t}), \sigma_{\mathrm{obs}} \right)$.
+
+We used 20 knots to represent the spatial process
+(increasing the number of knots did not substantially affect the results). We
+compared the above MVT model to a Gaussian random field model. To evaluate
+out-of-sample predictive accuracy we withheld 25 randomly selected data points
+per year from the model fitting, for a total of 400 withheld data points, or
+approximately 10\% of the data. We then compared the log predictive density for
+the held-out data and the width of the 95\% CIs
+(details, including priors in Appendix S1).
+
+\section{Results}
+
+Under most scenarios we were able to recapture true values of $\nu$ with
+reasonable accuracy and low bias (Fig.~\ref{fig:recapture},
+Appendix S1: Fig.~\ref{fig:recapture-factorial}). The number of time steps had the largest
+effect on detecting low values of $\nu$. For example, the median absolute
+proportional error between $\nu$ and $\hat{\nu}$ (median of the posterior) was
+only \mapeTwentyFive\ with 25 time steps, minimal observation error (CV = 0.1),
+and $\nu = 2.5$ (Fig.~\ref{fig:recapture}b). However, the median absolute
+proportional error increased by approximately \mapeFifteenIncFold - and
+\mapeFiveIncFold -fold when the number of time steps was reduced to 15 and 5,
+respectively (Fig.~\ref{fig:recapture}b). Observation error did not
+substantially affect the estimation of $\nu$ until relatively high levels of
+observation error (i.e.\ CV = 1.2, Fig.~\ref{fig:recapture}c).
+
+When the true underlying data were generated with spatiotemporal extremes (MVT,
+$\nu = 2$), fitting a model without extremes reduced out-of-sample predictive
+accuracy and precision (Fig.~\ref{fig:sim-performance}). The MVN model tended to
+overestimate $\sigma_{\mathrm{GP}}$ (which controls the magnitude of the random field
+deviations) to account for effectively fixing $\nu = \infty$ (e.g.\
+Fig.~\ref{fig:sim-performance}a).
+The out-of-sample RMSE (root mean squared error) was slightly higher for the
+misspecified MVN model compared to a correctly specified MVT model (median RMSE
+= \rmseWrong\ vs.\ \rmseRight; Fig.~\ref{fig:sim-performance}b). The out-of-sample MVN
+model CIs were a median of \medianMedianCIWiderSim \% larger than the MVT model
+CIs. The leave-one-out information criterion (LOOIC) correctly chose the MVT
+model in \looCorrectSim \% of the simulations (Fig.~\ref{fig:sim-performance}c).
+Separately, if linear predictors were included, we found them to be largely
+unbiased under the misspecified MVN model --- the effect of misspecification was
+on the random field estimation and therefore the predictions in space and
+time.
+
+For the pine beetle case study, the spatial model with extremes generated more
+accurate and precise out-of-sample predictions (Fig.~\ref{fig:map-etc}). The
+estimates of $\nu$ indicated heavy tails in the spatiotemporal process (median
+$\nu = \nuBeetleMedian$, 95\% CI = $\nuBeetleLower$ -- $\nuBeetleUpper$,
+Fig.~\ref{fig:map-etc}c). Advantages of the MVT model over the MVN included
+greater log predictive density for held-out data (Fig.~\ref{fig:map-etc}d)
+% smaller values of LOOIC (SE = XX),
+and a median of \medianPercSmallerCIsBeetles \% narrower 95\% CIs. Predictions
+from the MVT model demonstrate evolving hotspots of pine beetle infestation in
+the US Pacific Northwest, with particularly strong hotspots in 2009--2010
+(Fig.~\ref{fig:beetle-pred}).
+
+\section{Discussion}
+
+We have introduced a spatial process model that models random fields through
+time with a MVT rather than MVN distribution. Through simulation, we demonstrate
+the advantages of this new model: when spatiotemporal extremes exist in
+simulated data, our MVT model has superior predictive accuracy and precision.
+Using a case study on mountain pine beetle outbreaks in the Pacific Northwest,
+we show that our MVT model produces more accurate and precise out-of-sample
+predictions compared to a MVN model. Because the MVT model converges to the MVN
+model and only requires estimating one additional parameter, we recommend
+fitting the MVT model even if anomalous events are not thought to be present
+\textit{a priori}.
+
+Many ecological, environmental, and anthropogenic processes could generate
+spatiotemporal extremes. For example, unmodelled animal movement such as changes
+to the shoaling behaviour of fish with population density declines
+\citep[][]{rose1999} could generate apparent extremes. Another possible cause
+could be spatial climate anomalies. For instance, a series of abnormally warm
+winters around 1990 led to a sudden northward shift in juvenile cod followed by low
+abundance in the southern North Sea \citep{rindorf2006}. In southern
+Australia, several weeks of extreme warm water temperatures led to the sudden
+range contraction of a brown alga seaweed \citep{smale2013}. Heat waves can also
+increase the likelihood of wildfires or disease outbreaks
+\citep[e.g.][]{harvell2002}, which could generate spatial extremes through time.
+Additionally, human-caused disasters, such as marine oil spills could cause
+extremes in spatial patterns through time. In essence, the MVT random fields
+model allows for unexpected and unmodelled events to occur and have less
+influence on parameter estimates and predictions.
+
+For our case study of pine beetle outbreaks, the MVT model provided
+better out-of-sample predictive ability and greater precision compared to the
+same model with a MVN random field. We did not link covariates, such as
+temperature, to the mean response, but it is possible that their inclusion could
+help explain the spatial anomalies. Importantly, our model is descriptive rather
+than dynamic \citep{cressie2011}. A dynamic model would include mechanisms
+governing the spatial evolution of the pine beetle outbreaks \citep[such as
+available tree host size and quality,][]{chubaty2009}, and these types of
+mechanisms could generate the extremes we observe with our descriptive model.
+Alternatively, incorporating spatiotemporal extremes into a dynamic model of
+pine beetle outbreaks might improve its predictive capacity.
+
+Our associated R package, \textbf{glmmfields}, is designed to be familiar for
+anyone who has fit GLMs in R, and includes flexibility for many features beyond
+those described so far. For example, \textbf{glmmfields} can be used to fit
+spatial GLMMs for data without a temporal component (Appendix S2). The package
+can fit observation models beyond those included in this paper, such as Poisson,
+negative binomial, or binomial, and can include numeric or factor covariates.
+\textbf{glmmfields} includes familiar R utility functions (e.g.\
+\texttt{predict()}) and plotting functions for model checking. Furthermore, the
+package includes a simulation function that can simulate data from any model the
+package can fit, and a series of unit tests that simulate and fit all major
+model configurations.
+
+There are limitations to the approach we have described. First, spatial
+predictive models require the selection of knots; too few may not characterize
+the spatial field accurately, biasing parameter estimates. The spatial process
+may also be poorly described by a MVT or MVN random field and be better
+described by some other form \citep[e.g.\ see][]{conn2015}. While the MVT
+spatial model is more robust than the MVN model, better predictions and
+inference might be obtained by explicitly modelling the processes that generated
+the extremes. Also, the MVT random fields model requires a sufficient number of
+observations and sufficiently low sampling error to detect spatial extremes
+(though when extremes cannot be detected, the model converges to the MVN model).
+
+Our MVT spatial model uses a predictive approach to achieve considerable
+efficiency over modelling a full covariance matrix describing all observed
+locations. However, an important topic for research is to include sparse matrix
+algorithms in spatiotemporal models of extremes. A recent advance to spatial
+models with large datasets has been the stochastic partial differential equation
+(SPDE) approximation to GRFs proposed by \citet{lindgren2011}. These methods are
+accessible via the integrated nested Laplace approximation
+\citep[INLA,][]{rue2009}, which allows for approximate Bayesian sampling of the
+posterior without MCMC. Use of the SPDE-INLA approach has increased rapidly in
+ecology over the last five years \citep[e.g.][]{illian2013, ono2016}, and is
+significantly faster than other approaches, in part because of integration with
+Template Model Builder through software such as \textbf{VAST} \citep{thorson2017}.
+Regardless, the MVT random field model introduced here is already efficient,
+accessible to a wide range of ecologists through
+the included R package, and allows us to improve predictions for ecological
+processes with extreme spatial anomalies through time.
+
+\section{Acknowledgements}
+
+We thank T.A. Branch and J.T. Thorson for helpful discussions on the modeling
+approach and B.J. Harvey for helpful advice on the mountain pine beetle dataset.
+We are grateful to the maintainers of the U.S. Forest Service Insect and Disease
+Survey Database.
+We thank J.T. Thorson and A.M. Edwards for helpful comments on an earlier
+version of this manuscript.
+Funding was provided by a David H. Smith Conservation Research
+Fellowship to S.C.A.
+All code and data associated with this paper are available at
+\url{https://github.com/seananderson/spatial-extremes} and are archived at
+\url{https://doi.org/TODO/zenodo.TODO}.
+The R package \textbf{glmmfields} is available at
+\url{https://github.com/seananderson/glmmfields} and
+\url{https://cran.r-project.org/package=glmmfields}.
+
+\setlength{\bibsep}{0pt plus 0ex}
+
+\bibliography{spatial-extremes}
+
+\clearpage
+
+\section{Figures}
+
+\begin{figure}[htb]
+  \begin{center}
+    \includegraphics[width=0.55\textwidth]{../figs/nu-rf-illustration-small.pdf}
+    \caption{An illustration of three draws from a MVN random field (top row)
+      vs.\ three draws from a MVT random field with heavy tails
+      (degrees of freedom, $\nu$, of 2; bottom row).
+      Draws represent slices of time with independent spatial
+      processes at each time slice.
+      The scale parameters $\sigma_{\mathrm{GP}}$, spatial decay parameters $\theta_{\mathrm{GP}}$,
+      random seeds, and colour scales are held constant
+      between the two rows
+      to illustrate the differences.
+      Note the considerably more extreme values (darker purples and yellows) in
+      the second draw for the MVT spatial process.}
+    \label{fig:nu}
+  \end{center}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[htb]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{../figs/simulation-results.pdf}
+    \caption{Simulation testing the ability to recapture the
+      degree of spatial heavy tailedness in an MVT random fields model.
+      Shown are tests with
+      (a) various true values of $\nu$ (the MVT degrees of freedom parameter),
+      (b) an increasing number of time steps in the data set (with low observation error),
+      and (c) an increasing level of observation error.
+      The full factorial results are shown in Appendix S1: Fig.~\ref{fig:recapture-factorial}.
+      Individual dots show the median estimates from individual simulation runs.
+      The colour scale indicates the true degree of heavy tailedness from
+      yellow (effectively normal) to red (very heavy tailed) and the
+      violin-shaped polygons represent the density.
+    }
+    \label{fig:recapture}
+  \end{center}
+\end{figure}
+
+\begin{figure}[htb]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{../figs/simulation-perf.pdf}
+    \caption{
+      The effect of fitting MVN and MVT models
+      when the true underlying data are drawn from simulated MVT random fields.
+      (a) Parameter posteriors for an
+      example model fit of a mismatched MVN model (orange)
+      and a correct MVT model (blue). Black crosses indicate true values.
+      The parameter $\nu$ is challenging to estimate but can generally
+      distinguish between providing evidence for heavy tails
+      (much lower than the prior) and not providing evidence for heavy tails
+      (matching the prior) \citep{anderson2017}.
+      The parameter
+      $\sigma_{\mathrm{GP}}$ represents the spatial standard deviation,
+      $\theta_{\mathrm{GP}}$ represents the spatial decay or correlation parameter,
+      and $\sigma_\mathrm{obs}$ represents the observation error standard deviation.
+      (b) Percent greater root mean squared error (RMSE)
+      and (c) $\Delta$ LOOIC (leave-one-out information criteria)
+      for the mismatched MVN model compared to the correct MVT model (negative
+      $\Delta$ LOOIC values favour the MVT model).
+    }
+    \label{fig:sim-performance}
+  \end{center}
+\end{figure}
+
+\begin{figure}[htb]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{../figs/beetle-performance.pdf}
+    \caption{
+      Model fit characteristics of autoregressive random field
+      models fit to mountain pine beetle data from the US Pacific Northwest.
+      (a) Map of the region with tree mortality observations for one year shown with
+      brown dots.
+      (b) Photograph of a pine beetle infested forest in British Columbia, Canada
+      (c) Posterior and prior distributions of the degrees of freedom parameter, $\nu$.
+      Low $\nu$ values (approximately $\nu < 10$) indicate evidence of heavy-tails.
+      (d) Log predictive density for held-out data for MVT (blue) and MVN (orange) models.
+      (e) The ratio of 95\% CI widths on the predicted percent beetle cover in
+      time and space between the MVN and MVT models (i.e. on the predictions
+      shown in Fig.~\ref{fig:beetle-pred}).
+    }
+    \label{fig:map-etc}
+  \end{center}
+\end{figure}
+
+\clearpage
+
+\begin{figure}[htb]
+  \begin{center}
+    \includegraphics[width=0.65\textwidth]{../figs/beetles-mvt-predictions.pdf}
+    \caption{Modelled severity of mountain pine beetle outbreaks in Washington and
+      Oregon State in the United States from 1999 to 2014.
+      Shown are medians of the modelled parameter $\mu_{s,t}$ from Equation 1
+      --- an autoregressive spatiotemporal MVT random fields model.
+      The colour scale is square-root distributed.
+    }
+    \label{fig:beetle-pred}
+  \end{center}
+\end{figure}
+
+% \end{flushleft}
+
+\end{spacing}
+
+
+\end{document}
