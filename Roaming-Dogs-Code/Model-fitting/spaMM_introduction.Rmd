@@ -1,0 +1,180 @@
+---
+title: "spaMM_introduction"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=8, fig.height=3) 
+```
+
+```{r library ,Warning = F}
+library(MASS)
+library(spaMM)
+library(dplyr)
+library(ggplot2)
+```
+
+## reference
+
+- <https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf>.
+
+## Matérn covariance function
+
+是統計學中的一個協方差函數。它常被用於定義兩點測量值之間的協方差。由於該協方差只取決於**兩點間的距離**，因而是平穩的。如使用**歐幾里得**距離來定義距離，此時的馬特恩協方差函數是各向同性的。(取自維基百科)
+
+因此通常使用該協方差矩陣來解釋空間之間的相關性。
+
+$$C_{\nu}(d) = {\sigma^2}\frac{2^{1-\nu}}{\Gamma(\nu)}(\sqrt{2\nu}\frac{d}{\rho})K_{\nu}(\sqrt{2\nu}\frac{d}{\rho})$$
+
+- $d$: 兩點的距離 \n
+- $\Gamma(.)$: $\Gamma(.)$ 函數 \n
+- $\rho, \nu$: 非負參數，$\rho$ 為 scale parameter(尺度參數)，$\nu$ 為 smoothing parameter(平滑參數)，越大越平滑 \n
+
+當$\nu = 0.5$: \n
+
+$$C_{\nu = 0.5}(d) = {\sigma^2}exp(-\frac{d}{\rho})$$
+
+當$\nu \rightarrow \infty$: \n
+
+$$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp(-\frac{d^2}{\rho^2})$$
+
+**不過`spaMM`的 $\rho$ 是這邊的`倒數`，因為這篇文章說 $C_{\nu = 0.5}(d) = {\sigma^2}exp(-{d}{\rho})$，$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp({-d^2}{\rho^2})$**
+
+<https://rdrr.io/cran/spaMM/man/Matern.corr.html>
+
+## Cauchy covariance function
+
+$$C_{cau}(d) = (1-Nuggest)(1+(\rho d)^{\nu})(longdep/\nu))$$
+
+- $Nuggest$: 金塊效應，算是某種誤差 \n
+- $\rho$: `rho`，尺寸參數(scaling factor) \n
+- $\nu$:`shape`，形狀（平滑）參數，若距離為歐式距離，$0< \nu \leq 2$；若為大圓距離 (Great-circle distance)，$0< \nu \leq 1$。\n
+- $longdep$: `longdep`，給出相關性隨距離漸近減小的指數，大於零的實數。\n
+
+<https://rdrr.io/cran/spaMM/man/CauchyCorr.html>
+
+## General features of spaMM
+
+### Model formulation
+
+$$g(\boldsymbol\mu) =\boldsymbol \eta = \boldsymbol X \boldsymbol \beta+\boldsymbol b = \boldsymbol X \boldsymbol \beta+ \boldsymbol Z \bf v$$
+
+- $g(.)$ : link function \n
+- $\boldsymbol b$ : 隨機效應，由已知的 “design matrix” $ \boldsymbol Z$ 與 $\boldsymbol v$ 組成。 \n
+- $\lambda$ 為隨機效應(Random effect)的變異數(Variance)，$\phi$ 為殘差(Residuals)的變異數(Variance)。 \n
+
+**`注意`，以上在說隨機效應彼此沒有關聯的時候，阿有關聯的時候會呈現的是一些關聯矩陣，例如上面介紹的Matérn或者Cauchy（論文是這麼說的啦！）**\n
+
+`u are independent realizations of some reference distribution (e.g., gaussian).` \n
+
+`spaMM` 會提供固定效應的參數($\boldsymbol \beta$)的估計與隨機效應的分布情形（the variances of $u_i$ and of the residual error $e_i$）以及 $\boldsymbol Z$ 的相關係數(例如前面說的$\rho , \nu$)
+
+
+### Response families
+
+目前有：
+- **gaussian** \n
+- **Gamma** \n
+- **poisson** \n
+- **binomial** \n
+- **negative-binomial** （NB 有自己的執行方式，可以看看`negbin`） \n
+- **COMPoisson** \n
+- **零截斷(zero-truncated variants) 的 Poisson 與 negative-binomial** (see help(Tpoisson) or help(Tnegbin) \n
+
+### Random effect (`spaMM.pdf` p.136)
+
+其中 $\boldsymbol v$ 可以再更加延伸為 $\bf v = f(\bf u)$，其中 $f(.)$ 為另外的 link function，$\bf u$ 服從一些某個特定分布的獨立變數(例如常態分佈)，也可以(被假設為)服從一些空間自相關模型，如Matern
+(as described in the above examples)、 Cauchy; grid-based approximations of classical geostatistical models (Lindgren et al., 2011), here denoted “Interpolated Markov Random Fields”  等等。
+
+$$\bf v = f(\bf u)$$ 
+
+- 若$\boldsymbol u$為獨立同分配(iid)，可以有以下的分配假設： \n
+  - **Guassion** \n
+  - **Beta-distributed** \n
+  - **Gamma-distributed** \n
+  - **Inverse-Gamma-distributed** \n
+
+- 若隨機效應彼此之間有關係（$\bf u$ not indepoendent），則可以將隨機效應表示成 $\bf Mv$, $\bf M = ZL \ or \ ZAL$ \n
+  - $\bf Z$: 通常是一個關聯矩陣,兩者相鄰為1，不相鄰為0。 \n
+  - $\bf A$: The optional A factor can also be given by the optional "AMatrices" attribute of covStruct. \n
+  - $\bf L$: 對於空間的隨機效應來說，通常為**Cholesky “square root”**，由Matern等距離相關矩陣分解而成。(For spatial random effects, L is typically the Cholesky “square root” of a correlation matrix determined by the random effect specification (e.g., Matern(...)) \n
+\n
+
+**Cholesky “square root”**：當$\bf A$ 為實數正定，則可分解唯一分解成$\bf A = GG^T$，其中$\bf G$ 為下三角矩陣，其主對角元素皆為正數。\n
+
+#### COMPoisson family
+
+Conway-Maxwell-Poisson 是以計數型的 Poisson 為基礎發展出來的分配，是為了解決那些過度分散或者過度集中(over- and underdispersion)的計數型分配。
+
+$$Pr(y;\lambda, \nu_{CMP}) = \frac{\lambda^y}{(y!)^{\nu_{CMP}}Z(\lambda, \nu_{CMP})}$$
+$$Z(\lambda, \nu_{CMP}) = \sum^ \infty_{k=0}\frac{\lambda^k}{(k!)^{\nu_{CMP}}}$$
+
+- $\nu_{CMP}$: 其值越小，分布程度越廣(overdispersion); 其值越大，分布程度越集中(underdispersion);$\nu_{CMP} = 1$ 的時候就是poisson 分配。
+
+
+###  The main procedures in `spaMM`
+
+#### 
+
+## Further examples
+
+### Simulation
+
+```{r}
+library(MASS)
+rSample <- function(nb,rho,sigma2_u,resid,intercept,slope,pairs=TRUE) {
+## sample pairs of adjacent locations
+if (pairs) {
+  x <- rnorm(nb/2); x <- c(x,x+0.001)
+  y <- rnorm(nb/2); y <- c(y,y+0.001)
+} else {x <- rnorm(nb);y <- rnorm(nb)}
+  
+  dist <- dist(cbind(x,y)) ## distance matrix between locations
+  m <- exp(-rho*as.matrix(dist)) ## correlation matrix
+  b <- mvrnorm(1,rep(0,nb),m*sigma2_u) ## correlated random effects
+  pred <- sample(nb) ## some predictor variable
+  obs <- intercept+slope*pred + b +rnorm(nb,0,sqrt(resid)) ## response
+  data.frame(obs=obs,x,y,pred=pred)
+}
+set.seed(123)
+d1 <- rSample(nb=40,rho=3,sigma2_u=0.5,resid=0.5,intercept=-1,slope=0.1)
+```
+
+#### plot
+```{r}
+p1 = qplot(data = d1,x = x, y = y, color = obs)
+p2 = qplot(data = d1,x = x, y = y, color = pred)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+#### MaternCorr (`corrMatrix` )
+
+`spaMM.pdf` (p.38)
+```{r}
+MLdistMat <- MaternCorr(proxy::dist(d1[,c("x","y")]),
+nu=0.5,rho=0.05)
+```
+
+```{r poisson}
+data(scotlip)
+lipfit <- HLCor(cases~I(prop.ag/10)+adjacency(1|gridcode)
++offset(log(expec)),
+data=scotlip,family=poisson(),adjMatrix=Nmatrix)
+
+lipfit_com <- fitme(cases~I(prop.ag/10)+adjacency(1|gridcode)
++offset(log(expec)),
+data=scotlip,family=COMPoisson(nu = .9),adjMatrix=Nmatrix)
+```
+
+```{r}
+summary(lipfit_com)
+```
+
+

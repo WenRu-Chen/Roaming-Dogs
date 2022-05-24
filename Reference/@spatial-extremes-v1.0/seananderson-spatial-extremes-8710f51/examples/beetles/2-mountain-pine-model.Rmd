@@ -8,7 +8,8 @@ knitr::opts_chunk$set(
   fig.width=9
 )
 
-knitr::opts_knit$set(root.dir = "C:/@@Roaming_Dogs_Data_Analysis")
+knitr::opts_knit$set(root.dir = "C:/@@Roaming_Dogs_Data_Analysis/Reference/@spatial-extremes-v1.0/seananderson-spatial-extremes-8710f51")
+getwd()
 library(dplyr)
 library(ggplot2)
 library(glmmfields)
@@ -47,10 +48,10 @@ proj4string(mp2)
 id <- "mountain-pine-beetle-pnw-raster"
 nbin <- 500
 
-d <- readRDS(paste0("C:/@@Roaming_Dogs_Data_Analysis/Reference/@spatial-extremes-v1.0/seananderson-spatial-extremes-8710f51/examples/beetles",
+d <- readRDS(paste0(
   id, "-", "dataframe", "-", nbin, "x", nbin, ".rds"))
 
-d_highres <- readRDS(paste0("examples/beetles/",
+d_highres <- readRDS(paste0(
   id, "-", "dataframe", "-", nbin, "x", nbin, "highres.rds"))
 
 # rescale
@@ -82,7 +83,7 @@ d <- group_by(d, year) %>%
       sample(row_number, size = 25L)) %>%
   ungroup()
 
-saveRDS(d, file = "examples/beetles/mountain-pine-beetle-data.rds")
+saveRDS(d, file = "mountain-pine-beetle-data.rds")
 
 # or the intercept prior will be off:
 assert_that(mean(log(d$cover+0.5)) > -5 & mean(log(d$cover+0.5)) < 5)
@@ -94,7 +95,7 @@ assert_that(nrow(d) < 5000)
 Fit the model. First the multivariate t model.
 
 ```{r model, cache=FALSE, warning=FALSE, message=FALSE, results='hide'}
-model_file <- paste0("examples/beetles/", id, "-",
+model_file <- paste0( id, "-",
   "mvt-lognormal", "-", nbin, "x", nbin, ".rda")
 if (!file.exists(model_file)) {
   mvt <- glmmfields(cover ~ 1,
@@ -119,8 +120,8 @@ if (!file.exists(model_file)) {
 } else {
   load(model_file)
 }
-# print(mvt)
-# shinystan::launch_shinystan(mvt$model)
+ print(mvt)
+ shinystan::launch_shinystan(mvt$model)
 ```
 
 Now the multivariate normal model.

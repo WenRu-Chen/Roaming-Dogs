@@ -49,16 +49,16 @@ sim_fit <- function(n_draws, df = 2, n_knots = 30, gp_theta = 0.5, sd_obs = 0.2,
   }
 
   m <- fit_model(iter = 500L)
-  b <- broom::tidyMCMC(m$model, rhat = TRUE, ess = TRUE)
+  b <- broom.mixed::tidyMCMC(m$model, rhat = TRUE, ess = TRUE)
   if (any(b$ess < 100) | any(b$rhat > 1.05)) {
     m <- fit_model(iter = 2000L)
   }
-  b <- broom::tidyMCMC(m$model, rhat = TRUE, ess = TRUE)
+  b <- broom.mixed::tidyMCMC(m$model, rhat = TRUE, ess = TRUE)
   if (any(b$ess < 100) | any(b$rhat > 1.05)) {
     m <- fit_model(iter = 4000L)
   }
 
-  b <- broom::tidyMCMC(m$model,
+  b <- broom.mixed::tidyMCMC(m$model, # 原本的 code : broom::tidyMCMC
     estimate.method = "median") %>%
     dplyr::select(-std.error) %>%
     tidyr::spread(term, estimate)
@@ -66,7 +66,7 @@ sim_fit <- function(n_draws, df = 2, n_knots = 30, gp_theta = 0.5, sd_obs = 0.2,
   b <- select(b, -starts_with("spatialEffectsKnots"))
   names(b) <- sub("\\[1\\]", "", names(b))
 
-  b2 <- broom::tidyMCMC(m$model,
+  b2 <- broom.mixed::tidyMCMC(m$model, # 原本的 code : broom::tidyMCMC
     estimate.method = "median", rhat = TRUE, ess = TRUE) %>%
     summarise(rhat = max(rhat), ess = min(ess))
 

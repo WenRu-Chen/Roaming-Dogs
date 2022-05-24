@@ -1,0 +1,574 @@
+---
+title: "Model Fitting"
+output: html_document
+fig_width: 6 
+fig_height: 4 
+---
+## Referance
+
+- http://idata8.com/rpackage/GWmodel/00Index.html **(GWmodel 的函數簡單說明) **
+- https://www.datascienceblog.net/post/machine-learning/interpreting_generalized_linear_models/ **(glm residual )**
+- https://stackoverflow.com/questions/2531489/understanding-glmresiduals-and-residglm
+**Calling resid(model) will default to the deviance residuals, whereas model$resid will give you the working residuals. **
+**resid(glm,type="working") = glm$residuals**
+- **普瓦松回歸的 variance 會隨著y_hat 越大而越大(residual 也會越大)**
+- https://online.stat.psu.edu/stat462/node/209/
+- https://rpubs.com/benhorvath/glm_diagnostics
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=11, fig.height=4.5) 
+```
+
+
+## library the packages
+
+```{r}
+library(GWmodel)      ### GW models
+library(dplyr)
+library(sp)           ## Data management
+library(car)          ## vif
+library(spdep)        ## Spatial autocorrelation
+library(RColorBrewer) ## Visualization
+library(classInt)     ## Class intervals
+library(raster)       ## spatial data
+library(grid)         # plot
+library(gridExtra)    # Multiple plot
+library(ggplot2)      # Multiple plot
+library(gtable)
+library(GGally)       # 相關係數圖矩陣（scatter plot matrix）
+library(maptools)
+library(MASS)
+library(tmap)
+library(gstat)        # Variogram
+```
+
+## Function 
+
+### pdf_Plot
+
+```{r pdf_Plot}
+pdf_plot <- function(x, idx = c(rep(TRUE, length(x)))){
+  g = ggplot()+
+    geom_histogram(aes(x = x[idx], y = ..density..), 
+                   fill = '#557C55', alpha = 0.8)+
+    geom_density(aes(x = x[idx], y = ..density..), 
+                 color = '#062C30', size = 1)+
+    theme_bw()
+  return(g)
+}
+```
+
+### Point_Plot
+
+```{r Point_Plot}
+point_plot <- function(x, idx = c(rep(TRUE, length(x)))){
+  g = ggplot()+
+    geom_point(aes(x = Variable_df$X[idx], y = Variable_df$Y[idx], color = x[idx] , size = abs(x[idx])))+
+     scale_colour_gradient2(low = "#313552",mid = "#FBF8F1", high = "#632626")
+  
+  
+  return(g)
+}
+```
+
+
+## Load and tidy data
+
+```{r Load data}
+path = '..\\..\\Roaming-Dogs-Data\\'
+
+# Variable_df <- read.csv(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ), fileEncoding = 'utf-8')
+Variable_shp<-shapefile(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ),encoding = 'utf-8')
+Variable_shp@data["School"] <- rowSums(Variable_shp@data[c("Ele","Junior" ,"Senior")])
+Variable_shp@data["Student"] <- rowSums(Variable_shp@data[c("Ele_stu","Junior_stu" ,"Senior_stu")])
+Variable_shp@data[is.na(Variable_shp@data)] <- 0
+
+Variable_shp@data$Nr = Variable_shp@data$Nr %>% as.integer()
+```
+
+```{r Varaible name 01 original}
+col_X = 
+  c( "Cluster",# 分群
+     "Hospital","Clinic", "Temple", "School", "Train.stat", # 公共建設
+     "Student", "Train.crow", # 人流
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" ,"P_H_CNT","H_CNT", "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta") # 村里收入
+col_y = c("Nr")
+```
+
+```{r 轉成數值}
+for(i in c(col_X, col_y, "P_CNT")){
+  
+  Variable_shp@data[i] = sapply(Variable_shp@data[i], function(x) as.numeric(x))
+}
+```
+
+## Clustering
+
+分層：
+- 原本的分層：依照人口密度、農業人口比例、專科以上人口比例及老年人口比例等變數，以群分析（Kmeans）作為都市化程度分層依據，依縣市為單位，將縣市內的的鄉鎮市區分為二至四層。
+
+### 轉成密度(公共建設分母為面積，遊蕩犬分母為面積)
+```{r 轉成密度}
+for(i in c( "Temple",  "School", "Train.stat",  "Clinic","Ele_stu", "Junior_stu" ,"Senior_stu", "Train.crow","H_CNT")){
+  
+  i_new = paste0(i, "_den")
+
+  Variable_shp@data[i_new] = Variable_shp@data[i]/Variable_shp@data$Area_sqkm
+}
+Variable_shp@data["Nr_den"] = Variable_shp@data["Nr"]/Variable_shp@data$Area_sqkm
+```
+
+```{r}
+Variable_df =Variable_shp@data 
+```
+
+- 因為分群包含教育程度、老年人口比例與人口密度等資訊，因此將其相關變數去除。
+- 因為里裡面的學生人數與扶幼率有極大正相關，因此使用扶幼率。
+- 太多里沒有醫院，與之去除
+```{r}
+col_X = 
+  c( "Cluster", # 分群,
+    "Clinic", "Temple", "School" ,"Train.stat",
+     "Clinic_den", "Temple_den", "School_den" ,"Train.stat_den", # 公共建設
+     "Train.crow", # 人流
+      "M_F_RAT" ,"YOUN_DEP","H_CNT_den", "P_H_CNT", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta") # 村里收入
+col_y = c('Nr')
+col_y_den =c('Nr_den')
+```
+
+### Scale the Data
+```{r scale the data}
+for (i in col_X[col_X != "Cluster"]){
+
+    Variable_df[i] <- scale(Variable_df[i])
+    Variable_shp@data[i] <-scale(Variable_shp@data[i])
+
+}
+```
+
+```{r}
+for (i in c(1:4)){
+  
+print(sum(Variable_df$Cluster == i))
+  
+}
+```
+
+```{r}
+g = ggplot(data = Variable_df)+
+  geom_boxplot(aes(x = as.factor(Cluster), y = Nr))
+g
+```
+
+
+## Correlation
+```{r correlation}
+corr = cor(Variable_df[c(col_y, col_y_den,col_X)])
+idx = abs(corr[,col_y_den])>.05 
+col_X_den = c("Temple_den",  "School_den", "Train.stat_den",  "Clinic_den")
+col_X_02 = names(corr[idx,col_y_den]) %>% tail(-2)
+
+corr[idx,idx]
+```
+```{r scatter plot}
+ggpairs(Variable_df, columns =c(col_X_02,col_y_den))
+```
+
+## LASSO (Variables Selection，完全沒用！) 
+
+- https://rpubs.com/chengjunhou/LASSO
+
+```{r}
+# library(glmnet)
+# X = Variable_df[col_X] %>% data.matrix()
+# y = Variable_df[col_y] %>% data.matrix()
+# 
+# 
+# fit = glmnet(X, y, family="poisson", nlambda=200, alpha=1, offset = log(Variable_df$Area_sqkm))
+# print(fit)
+```
+```{r}
+# coef(fit, s=c(fit$lambda[100],0.1))
+```
+
+
+## Fitting the model
+
+```{r X y offset}
+# 
+# col_X_03 = c("Temple_den","School_den", "Clinic_den","M_F_RAT","YOUN_DEP", "Income_mea")
+# f = Nr~Temple_den+School_den+Clinic_den+M_F_RAT+YOUN_DEP+Income_mea+offset(log(Area_sqkm))
+# col_offset = c("Area_sqkm")
+
+###
+"Cluster"      
+
+col_X_03 = c("Cluster","Clinic_den", "Temple_den", "Area_sqkm" )
+f = Nr~Cluster+Clinic+Temple+Area_sqkm
+# col_offset = c("Area_sqkm")
+
+ggpairs(Variable_df, columns =c(col_X_03,col_y_den)) 
+```
+
+### GLM_Poisson 
+```{r glm.PO}
+glm.PO <- glm(f,  family = poisson(link = "log"), data = Variable_df[c(col_y, col_X_03, col_offset)])
+summary(glm.PO)
+
+fit.resp = predict(glm.PO, newdata = Variable_df[c(col_y, col_X_03, col_offset)], type = "response") # 已用 exp 轉過的
+fit.link = predict(glm.PO, newdata = Variable_df[c(col_y, col_X_03, col_offset)], type = "link") # log(mu_i)
+res.pear = residuals(glm.PO, type = "pearson")
+res.work = residuals(glm.PO, type = "working")
+
+residual_df = data.frame(VILLCODE = Variable_df$VILLCODE,
+                         COUNTYNAME = Variable_df$COUNTYNAME,
+                         TOWNNAME = Variable_df$TOWNNAME,
+                         VILLNAME = Variable_df$VILLNAME,
+                         X = Variable_df$X,
+                         Y = Variable_df$Y,
+                         Nr= Variable_df$Nr,
+                         Cluster = Variable_df$Cluster,
+                         glm.PO.res.pear =res.pear,
+                         glm.PO.fit = fit.resp)
+```
+### GLM_NB
+- https://bookdown.org/roback/bookdown-BeyondMLR/ch-poissonreg.html
+- https://fukamilab.github.io/BIO202/04-C-zero-data.html
+
+先只用各里寺廟、學校、診所密度與男女比、里平均收入建模
+
+```{r glm.NB}
+glm.NB<- glm.nb(f ,data = Variable_df[c(col_X_03, col_y, col_offset)])
+
+summary(glm.NB)
+
+fit.resp = predict(glm.NB, newdata = Variable_df[c(col_y, col_X_03, col_offset)], type = "response") # 已用 exp 轉過的
+fit.link = predict(glm.NB, newdata = Variable_df[c(col_y, col_X_03, col_offset)], type = "link") # log(mu_i)
+res.pear = residuals(glm.NB, type = "pearson")
+res.work = residuals(glm.NB, type = "working")
+
+residual_df["glm.NB.res.pear"] = res.pear
+residual_df["glm.NB.fit"] = fit.resp
+
+```
+
+### GWPR
+
+- http://www-sre.wu.ac.at/ersa/ersaconfs/ersa13/ERSA2013_paper_01142.pdf
+- 帶寬 (依照論文來定)
+
+```{r}
+DM<-gw.dist(dp.locat=data.matrix(((Variable_df[c('X', "Y")]))))
+
+# bw.gwr <- bw.ggwr(f,
+#                  data = Variable_shp[c(col_X_03, col_y, "Area_sqkm")],
+#                  family = "poisson",
+#                  approach = "AICc",
+#                  kernel = "gaussian",
+#                  adaptive = TRUE,
+#                  dMat = DM )
+core.HR = mean(.3+.3+.33+.25)*10000; ext.HR = mean(7.7+5.7+5.7+5.6)*10000 
+core.bw.gwr = (core.HR/pi)^.5; ext.bw.gwr = (ext.HR/pi)^.5; 
+```
+
+```{r}
+gwr.PO <- ggwr.basic(f, 
+                      data =Variable_shp[c(col_X_03, col_y, "Area_sqkm")],
+                      family = "poisson",
+                      bw = ext.bw.gwr, 
+                      kernel = "gaussian",
+                      adaptive = TRUE,
+                      dMat = DM)
+res.pear = (Variable_shp$Nr-gwr.PO$SDF$yhat)/(gwr.PO$SDF$yhat)^.5
+residual_df["gwr.PO.res.pear"] = res.pear
+residual_df["gwr.PO.fit"] = gwr.PO$SDF$yhat
+summary(gwr.PO$SDF)
+```
+
+
+
+### GLM_poisson with spatial (純粹看不懂) 
+
+`glmmfields`:
+- https://github.com/seananderson/glmmfields
+- https://cran.r-project.org/web/packages/glmmfields/glmmfields.pdf 
+- http://idata8.com/rpackage/glmmfields/00Index.html 
+- https://www.mendeley.com/reference-manager/reader/ff1905f3-c0cf-38a2-a752-af1e7632d6eb/2c200ea5-4352-f33f-4851-2b712e71ce53
+**Black swans in space: modeling spatiotemporal processes with extremes**
+這篇論文在討論關於極端值的部分，但是似乎沒有使用
+
+`spaMM`:
+- https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf 
+- https://www.diva-portal.org/smash/get/diva2:685966/FULLTEXT02
+**GLMM 與 GMRF 最大的差別就是後者的隨機效應並不獨立**
+- https://www.r-bloggers.com/2019/09/spatial-regression-in-r-part-1-spamm-vs-glmmtmb/
+**簡單介紹spaMM**
+
+先只用各里寺廟、學校、診所密度與男女比、里平均收入建模
+
+```{r}
+library(glmmfields)
+# glm.PO.S <- glmmfields(f,
+#   data = Variable_df[c(col_y, col_X_03, col_offset, "X", "Y")],
+#   family = poisson(link = "log"),
+#   lat = "Y", lon = "X", 
+#   nknots = 50, 
+#   iter = 500, 
+#   chains = 1,
+#   prior_intercept = student_t(3, 0, 10), 
+#   prior_beta = student_t(3, 0, 3),
+#   prior_sigma = half_t(3, 0, 3),
+#   prior_gp_theta = half_t(3, 0, 10),
+#   prior_gp_sigma = half_t(3, 0, 3),
+#   seed = 123 # passed to rstan::sampling()
+# )
+
+saveRDS(glm.PO.S, "glm_PO_S.rds")
+glm.PO.S <- readRDS("glm_PO_S.rds")
+
+```
+
+```{r}
+(glm.PO.S$model)
+```
+```{r}
+fit.resp <- 
+predict(
+glm.PO.S,
+newdata = Variable_df[c(col_y, col_X_03, col_offset, "X", "Y")],
+estimate_method = "median",
+conf_level = 0.95,
+interval =  "prediction",
+type =  "response",
+return_mcmc = FALSE,
+iter = "all"
+)
+
+residual_df["glm.PO.S.res.resp"] = Variable_df$Nr-fit.resp$estimate
+residual_df["glm.PO.S.res.pear"] = (Variable_df$Nr-fit.resp$estimate)/fit.resp$estimate^.5
+residual_df["glm.PO.S.fit"] = fit.resp$estimate
+```
+
+
+```{r}
+p1 = plot(glm.PO.S, type = "prediction", link = F) ; p2 = plot(glm.PO.S, type = "prediction", link = T)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+```{r}
+p1 = plot(glm.PO.S, type = "spatial-residual", link = T); p2 = plot(glm.PO.S, type = "spatial-residual", link = F)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+
+```
+
+```{r}
+plot(glm.PO.S, type = "residual-vs-fitted", link = T);plot(glm.PO.S, type = "residual-vs-fitted", link = F)
+```
+
+### GLMM_NB with spatial (尚未完成) 
+
+
+```{r}
+library(glmmfields)
+# glm.NB.S <- glmmfields(f,
+#   data = Variable_df[c(col_y, col_X_03, col_offset, "X", "Y")],
+#   family = nbinom2(link = "log"),
+#   lat = "Y", lon = "X",
+#   nknots = 50,
+#   iter = 500,
+#   chains = 1,
+#   estimate_df = TRUE,
+#   prior_intercept = student_t(3, 0, 10),
+#   prior_beta = student_t(3, 0, 3),
+#   prior_sigma = half_t(3, 0, 3),
+#   prior_gp_theta = half_t(3, 0, 10),
+#   prior_gp_sigma = half_t(3, 0, 3),
+#   seed = 123 # passed to rstan::sampling()
+# )
+saveRDS(glm.NB.S, "glm_NB_S.rds")
+
+
+```
+
+```{r}
+glm.NB.S <- readRDS("glm_NB_S.rds")
+
+```
+
+```{r}
+# fit.resp <- 
+# predict(
+# glm.NB.S,
+# newdata = Variable_df[c(col_y, col_X_03, col_offset, "X", "Y")],
+# estimate_method = "median",
+# conf_level = 0.95,
+# interval =  "prediction",
+# type =  "response",
+# return_mcmc = FALSE,
+# iter = "all"
+# )
+# 
+# residual_df["glm.PO.S.res.resp"] = Variable_df$Nr-fit.resp$estimate
+# residual_df["glm.PO.S.res.pear"] = (Variable_df$Nr-fit.resp$estimate)/fit.resp$estimate^.5
+# residual_df["glm.PO.S.fit"] = fit.resp$estimate
+```
+
+<!-- ```{r} -->
+<!-- p1 = plot(glm.NB.S, type = "prediction", link = F) ; p2 = plot(glm.NB.S, type = "prediction", link = T) -->
+<!-- ggpubr::ggarrange(p1, p2, ncol = 2) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p1 = plot(glm.NB.S, type = "spatial-residual", link = T); p2 = plot(glm.NB.S, type = "spatial-residual", link = F) -->
+<!-- ggpubr::ggarrange(p1, p2, ncol = 2) -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- plot(glm.PO.S, type = "residual-vs-fitted") -->
+<!-- ``` -->
+
+#### Poisson-CAR
+- https://carleton.ca/math/wp-content/uploads/Vince-Yordanov-Honors-Project-January-8-2020.pdf
+**介紹很多空間模型**
+- https://mc-stan.org/users/documentation/case-studies/mbjoseph-CARStan.html
+
+
+#### Poisson-SAR 
+- https://aip.scitation.org/doi/pdf/10.1063/5.0041857
+- https://rdrr.io/github/gregmacfarlane/sppois/man/sarpoisson.html
+
+```{r install sppois}
+# install.packages("remotes")
+# remotes::install_github("gregmacfarlane/sppois")
+```
+
+- https://blog.csdn.net/weixin_54000907/article/details/116247097 
+**如何在R语言中计算空间自相关指数**
+```{r library sppois}
+library(sppois)
+
+# 使用距離定義
+Variable_sf = st_as_sf(Variable_shp)
+ncpoint <- st_centroid(st_geometry(Variable_sf))
+
+nb.k <- knn2nb(knearneigh(ncpoint))
+max = max(unlist(nbdists(nb.k, ncpoint)))
+nb.dist <- dnearneigh(ncpoint, 0, 0.5*max)
+nb.dist2 <- dnearneigh(ncpoint, 0, max)
+nb.dist3 <- dnearneigh(ncpoint, 0, 1.5*max)
+```
+
+### Other models
+- file:///C:/Users/ChenWenRu/Downloads/imet131-j-chapitre-6.pdf
+
+## Residual
+
+用 pearson residual
+
+Poisson Model:
+
+$$r^d_i = \frac{{y_i} - \hat{\mu_i}}{\sqrt{\hat{\mu_i}}}$$
+Negative Binomial Model:
+- https://stats.stackexchange.com/questions/99406/why-are-pearsons-residuals-from-a-negative-binomial-regression-smaller-than-tho
+
+$$r^d_i = ({{y_i} - \bar{\mu_i})}/{\sqrt{\bar{\mu_i}-\frac{\tilde{\mu}}{\theta}}}$$
+
+### 觀察極端值
+
+```{r glm.PO.res.pear}
+idx.glm.PO = residual_df$glm.PO.res.pear>50
+sum(idx.glm.PO)
+
+outlier = Variable_df[idx.glm.PO , c("COUNTYNAME","TOWNNAME", "VILLNAME" ,col_y, col_X_03, col_offset, "X", "Y")]
+print(outlier)
+```
+
+### Plot
+
+```{r glm.PO.res.pear}
+res = residual_df$glm.PO.res.pear
+p1 = pdf_plot(res,res<1000); p2 = point_plot(res,res<1000)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+mean(res[res<100])
+var(res[res<100])
+```
+
+
+```{r glm.NB.res.pear}
+res = residual_df$glm.NB.res.pear
+p1 = pdf_plot(res,res<5); p2 = point_plot(res,res<5)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+
+```{r gwr.PO.res}
+res = residual_df$gwr.PO.res.pear
+p1 = pdf_plot(res); p2 = point_plot(res)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+
+```{r glm.PO.S.res.pear}
+res = residual_df$glm.PO.S.res.pear
+p1 = pdf_plot(res,res<200); p2 = point_plot(res,res<200)
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+### Variogram
+
+```{r}
+## Transform the dataframe into a SpatialPointDataFrame
+## The objective is to obtain a spatial object
+coordinates(residual_df)=~X+Y
+class(residual_df)
+```
+```{r glm.PO.res.pear}
+idx = residual_df$glm.PO.res.pear<100
+Vario_glm.PO = variogram(glm.PO.res.pear~1, ## Here, we assume that there is a constant trend in the data.
+                           ## It would not have been the case for an elevation study along a hillslope where 
+                           ##there would have been a clear elevation trend regarding the spatial coordinates (along the hillslope)
+                     data=residual_df[idx,])
+plot(Vario_glm.PO)
+
+```
+
+```{r glm.NB.res.pear}
+idx = residual_df$glm.NB.res.pear<100
+Vario_glm.NB=variogram(glm.NB.res.pear~1, ## Here, we assume that there is a constant trend in the data.
+                           ## It would not have been the case for an elevation study along a hillslope where 
+                           ##there would have been a clear elevation trend regarding the spatial coordinates (along the hillslope)
+                     data=residual_df[idx,])
+plot(Vario_glm.NB)
+```
+
+
+```{r gwr.PO.res}
+idx = residual_df$gwr.PO.res.pear>-90
+Vario_gwr.PO=variogram(gwr.PO.res.pear~1, ## Here, we assume that there is a constant trend in the data.
+                           ## It would not have been the case for an elevation study along a hillslope where 
+                           ##there would have been a clear elevation trend regarding the spatial coordinates (along the hillslope)
+                     data=residual_df[idx,])
+plot(Vario_gwr.PO)
+```
+```{r Nr}
+idx = residual_df$gwr.PO.res.pear>-900
+Vario_Nr =variogram(Nr~1, ## Here, we assume that there is a constant trend in the data.
+                           ## It would not have been the case for an elevation study along a hillslope where 
+                           ##there would have been a clear elevation trend regarding the spatial coordinates (along the hillslope)
+                     data=residual_df[idx,])
+plot(Vario_Nr)
+```
+
+### Check the original data
+
+把殘差過大的地方拿出來看看
+
+```{r}
+villcode = residual_df$VILLCODE[residual_df$glm.NB.2.res>5]
+dt = (Variable_df[Variable_df$VILLCODE %in% villcode ,c('VILLCODE','COUNTYNAME','TOWNNAME','VILLNAME',col_X_03, col_y)])
+
+```
