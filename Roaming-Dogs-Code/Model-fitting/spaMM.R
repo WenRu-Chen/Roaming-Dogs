@@ -51,3 +51,6 @@ sample_nu_.5 <- rcomp(n = 10000, lam = 5, nu = .5)
 sample_nu_1.5 <- rcomp(n = 10000, lam = 5, nu = 1.5)
 sample_nu_2 <- rcomp(n = 10000, lam = 5, nu = 2)
 barplot(table(sample))
+
+data("scotlip")
+

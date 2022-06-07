@@ -3,7 +3,11 @@
         {
             "columnIndex": 2,
             "ascending": true
+        },
+        {
+            "columnIndex": 4,
+            "ascending": false
         }
     ],
-    "path": "C:/@@Roaming_Dogs_Data_Analysis/Roaming-Dogs-Code/Model-fitting"
+    "path": "C:/@@Roaming_Dogs_Data_Analysis/Roaming-Dogs-Code/Model-fitting/model/model04/No_train_test/Cauchy"
 }

@@ -1,0 +1,28 @@
+model01 (package: spaMM):
+- family = COMPoisson()
+- Nr~Cluster+P_H_CNT+Area_sqkm+Cauchy(1|X+Y)
+- Nr~Cluster+P_H_CNT+Area_sqkm+Matern(1|X+Y)
+- 台北市沒有 Cluster
+
+model02
+- family = COMPoisson()
+- Nr~Cluster + P_H_CNT + offset(log(Area_sqkm))+Cauchy(1|X+Y)
+- Nr~Cluster + P_H_CNT + offset(log(Area_sqkm))+Matern(1|X+Y)
+- 台北市沒有 Cluster
+
+model03
+- family = negbin()
+- Nr~Cluster + P_H_CNT + offset(log(Area_sqkm))+Cauchy(1|X+Y)
+- Nr~Cluster + P_H_CNT + offset(log(Area_sqkm))+Matern(1|X+Y)
+- 台北市沒有 Cluster
+- 結果：殘差很大，預測不準！
+
+model04
+- family = negbin()
+- Nr ~ M_F_RAT + H_CNT + offset(log(Area_sqkm)) + Cauchy(0 + P_H_CNT|X + Y)
+- Nr ~ M_F_RAT + H_CNT + offset(log(Area_sqkm)) + Matern(0 + P_H_CNT|X + Y)
+
+model05
+- family = COMPoisson()
+- Nr ~ Cluster + P_H_CNT + H_CNT + offset(log(Area_sqkm)) + Cauchy(0 +  M_F_RAT | X + Y)
+- Nr ~ Cluster + P_H_CNT + H_CNT + offset(log(Area_sqkm)) + Matern(0 +  M_F_RAT | X + Y)

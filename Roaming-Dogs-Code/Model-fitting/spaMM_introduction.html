@@ -277,11 +277,21 @@ library(spaMM)</code></pre>
 ##     intersect, setdiff, setequal, union</code></pre>
 <pre class="r"><code>library(ggplot2)</code></pre>
 <pre><code>## Warning: 套件 &#39;ggplot2&#39; 是用 R 版本 4.1.3 來建造的</code></pre>
+<pre class="r"><code>library(raster)</code></pre>
+<pre><code>## Warning: 套件 &#39;raster&#39; 是用 R 版本 4.1.3 來建造的</code></pre>
+<pre><code>## 載入需要的套件：sp</code></pre>
+<pre><code>## Warning: 套件 &#39;sp&#39; 是用 R 版本 4.1.1 來建造的</code></pre>
+<pre><code>## 
+## 載入套件：&#39;raster&#39;</code></pre>
+<pre><code>## 下列物件被遮斷自 &#39;package:dplyr&#39;:
+## 
+##     select</code></pre>
+<pre><code>## 下列物件被遮斷自 &#39;package:MASS&#39;:
+## 
+##     select</code></pre>
 <div id="reference" class="section level2">
 <h2>reference</h2>
-<ul>
-<li><a href="https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf" class="uri">https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf</a>.</li>
-</ul>
+<p><code>spaMM</code>: - <a href="https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf" class="uri">https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf</a> - <a href="https://www.r-bloggers.com/2019/09/spatial-regression-in-r-part-1-spamm-vs-glmmtmb/" class="uri">https://www.r-bloggers.com/2019/09/spatial-regression-in-r-part-1-spamm-vs-glmmtmb/</a> <strong>簡單介紹spaMM</strong></p>
 </div>
 <div id="matérn-covariance-function" class="section level2">
 <h2>Matérn covariance function</h2>
@@ -292,6 +302,7 @@ library(spaMM)</code></pre>
 <li><span class="math inline">\(d\)</span>: 兩點的距離 </li>
 <li><span class="math inline">\(\Gamma(.)\)</span>: <span class="math inline">\(\Gamma(.)\)</span> 函數 </li>
 <li><span class="math inline">\(\rho, \nu\)</span>: 非負參數，<span class="math inline">\(\rho\)</span> 為 scale parameter(尺度參數)，<span class="math inline">\(\nu\)</span> 為 smoothing parameter(平滑參數)，越大越平滑 </li>
+<li><span class="math inline">\({\displaystyle K_{\nu }}\)</span>: 第二類貝索函數 </li>
 </ul>
 <p>當<span class="math inline">\(\nu = 0.5\)</span>: </p>
 <p><span class="math display">\[C_{\nu = 0.5}(d) = {\sigma^2}exp(-\frac{d}{\rho})\]</span></p>
@@ -318,19 +329,20 @@ library(spaMM)</code></pre>
 <p><span class="math display">\[g(\boldsymbol\mu) =\boldsymbol \eta = \boldsymbol X \boldsymbol \beta+\boldsymbol b = \boldsymbol X \boldsymbol \beta+ \boldsymbol Z \bf v\]</span></p>
 <ul>
 <li><span class="math inline">\(g(.)\)</span> : link function </li>
-<li><span class="math inline">\(\boldsymbol b\)</span> : 隨機效應，由已知的 “design matrix” $ Z$ 與 <span class="math inline">\(\boldsymbol v\)</span> 組成，其中 <span class="math inline">\(\boldsymbol v\)</span> 可以再更加延伸為 <span class="math inline">\(\bf v = f(\bf u)\)</span>，其中 <span class="math inline">\(f(.)\)</span> 為另外的 link function，<span class="math inline">\(\bf u\)</span> 服從一些某個特定分布的獨立變數(例如常態分佈)。 </li>
+<li><span class="math inline">\(\boldsymbol b\)</span> : 隨機效應，由已知的 “design matrix” $ Z$ 與 <span class="math inline">\(\boldsymbol v\)</span> 組成。 </li>
+<li><span class="math inline">\(\lambda\)</span> 為隨機效應(Random effect)的變異數(Variance)，<span class="math inline">\(\phi\)</span> 為殘差(Residuals)的變異數(Variance)。 </li>
 </ul>
 <p><strong><code>注意</code>，以上在說隨機效應彼此沒有關聯的時候，阿有關聯的時候會呈現的是一些關聯矩陣，例如上面介紹的Matérn或者Cauchy（論文是這麼說的啦！）</strong></p>
 <p><code>u are independent realizations of some reference distribution (e.g., gaussian).</code> </p>
 <p><code>spaMM</code> 會提供固定效應的參數(<span class="math inline">\(\boldsymbol \beta\)</span>)的估計與隨機效應的分布情形（the variances of <span class="math inline">\(u_i\)</span> and of the residual error <span class="math inline">\(e_i\)</span>）以及 <span class="math inline">\(\boldsymbol Z\)</span> 的相關係數(例如前面說的<span class="math inline">\(\rho , \nu\)</span>)</p>
-<p>其中隨機效應(Random-effect) 可以(被假設為)服從一些空間自相關模型，如Matern (as described in the above examples)、 Cauchy; grid-based approximations of classical geostatistical models (Lindgren et al., 2011), here denoted “Interpolated Markov Random Fields” 等等。</p>
 </div>
 <div id="response-families" class="section level3">
 <h3>Response families</h3>
-<p>目前有 gaussian、 Gamma、poisson、 binomial、negative-binomial （NB 有自己的執行方式，可以看看<code>negbin</code>）、零截斷(zero-truncated variants) 的 Poisson 與 negative-binomial (see help(Tpoisson) or help(Tnegbin) 與 COMPoisson</p>
+<p>目前有： - <strong>gaussian</strong>  - <strong>Gamma</strong>  - <strong>poisson</strong>  - <strong>binomial</strong>  - <strong>negative-binomial</strong> （NB 有自己的執行方式，可以看看<code>negbin</code>）  - <strong>COMPoisson</strong>  - <strong>零截斷(zero-truncated variants) 的 Poisson 與 negative-binomial</strong> (see help(Tpoisson) or help(Tnegbin) </p>
 </div>
 <div id="random-effect-spamm.pdf-p.136" class="section level3">
 <h3>Random effect (<code>spaMM.pdf</code> p.136)</h3>
+<p>其中 <span class="math inline">\(\boldsymbol v\)</span> 可以再更加延伸為 <span class="math inline">\(\bf v = f(\bf u)\)</span>，其中 <span class="math inline">\(f(.)\)</span> 為另外的 link function，<span class="math inline">\(\bf u\)</span> 服從一些某個特定分布的獨立變數(例如常態分佈)，也可以(被假設為)服從一些空間自相關模型，如Matern (as described in the above examples)、 Cauchy; grid-based approximations of classical geostatistical models (Lindgren et al., 2011), here denoted “Interpolated Markov Random Fields” 等等。</p>
 <p><span class="math display">\[\bf v = f(\bf u)\]</span></p>
 <ul>
 <li>若<span class="math inline">\(\boldsymbol u\)</span>為獨立同分配(iid)，可以有以下的分配假設： 
@@ -352,13 +364,9 @@ library(spaMM)</code></pre>
 <h4>COMPoisson family</h4>
 <p>Conway-Maxwell-Poisson 是以計數型的 Poisson 為基礎發展出來的分配，是為了解決那些過度分散或者過度集中(over- and underdispersion)的計數型分配。</p>
 <p><span class="math display">\[Pr(y;\lambda, \nu_{CMP}) = \frac{\lambda^y}{(y!)^{\nu_{CMP}}Z(\lambda, \nu_{CMP})}\]</span> <span class="math display">\[Z(\lambda, \nu_{CMP}) = \sum^ \infty_{k=0}\frac{\lambda^k}{(k!)^{\nu_{CMP}}}\]</span></p>
-<p><span class="math inline">\(\nu_{CMP} = 1\)</span> 的時候就是poisson 分配。</p>
-</div>
-</div>
-<div id="the-main-procedures-in-spamm" class="section level3">
-<h3>The main procedures in <code>spaMM</code></h3>
-<div id="section" class="section level4">
-<h4></h4>
+<ul>
+<li><span class="math inline">\(\nu_{CMP}\)</span>: 其值越小，分布程度越廣(overdispersion); 其值越大，分布程度越集中(underdispersion);<span class="math inline">\(\nu_{CMP} = 1\)</span> 的時候就是 poisson 分配。</li>
+</ul>
 </div>
 </div>
 </div>
@@ -376,9 +384,9 @@ if (pairs) {
   
   dist &lt;- dist(cbind(x,y)) ## distance matrix between locations
   m &lt;- exp(-rho*as.matrix(dist)) ## correlation matrix
-  b &lt;- mvrnorm(1,rep(0,nb),m*sigma2_u) ## correlated random effects
+  b &lt;- mvrnorm(1,rep(0,nb),m*sigma2_u) ## correlated random effects
   pred &lt;- sample(nb) ## some predictor variable
-  obs &lt;- intercept+slope*pred + b +rnorm(nb,0,sqrt(resid)) ## response
+  obs &lt;- intercept+slope*pred + b +rnorm(nb,0,sqrt(resid)) ## response
   data.frame(obs=obs,x,y,pred=pred)
 }
 set.seed(123)
@@ -398,34 +406,344 @@ nu=0.5,rho=0.05)</code></pre>
 <pre class="r"><code>data(scotlip)
 lipfit &lt;- HLCor(cases~I(prop.ag/10)+adjacency(1|gridcode)
 +offset(log(expec)),
-data=scotlip,family=poisson(),adjMatrix=Nmatrix)</code></pre>
-<pre class="r"><code>summary(lipfit)</code></pre>
+data=scotlip,family=poisson(),adjMatrix=Nmatrix)
+
+lipfit_com &lt;- fitme(cases~I(prop.ag/10)+adjacency(1|gridcode)
++offset(log(expec)),
+data=scotlip,family=COMPoisson(nu = .9),adjMatrix=Nmatrix)</code></pre>
+<pre class="r"><code>summary(lipfit_com)</code></pre>
 <pre><code>## formula: cases ~ I(prop.ag/10) + adjacency(1 | gridcode) + offset(log(expec))
-## Estimation of lambda by Laplace REML approximation (p_bv).
+## Estimation of corrPars and lambda by Laplace ML approximation (p_v).
 ## Estimation of fixed effects by Laplace ML approximation (p_v).
-## family: poisson( link = log ) 
+## Estimation of lambda by &#39;outer&#39; ML, maximizing p_v.
+## family: COMPoisson(nu=0.9)( link = loglambda ) 
 ##  ------------ Fixed effects (beta) ------------
-##               Estimate Cond. SE t-value
-## (Intercept)     0.2377   0.2078   1.144
-## I(prop.ag/10)   0.3763   0.1218   3.090
+##                Estimate Cond. SE  t-value
+## (Intercept)   -0.009122   0.1972 -0.04625
+## I(prop.ag/10)  0.382755   0.1157  3.30875
 ##  --------------- Random effects ---------------
 ## Family: gaussian( link = identity ) 
 ##                    --- Correlation parameters:
 ##     1.rho 
-## 0.1740116 
+## 0.1740081 
 ##            --- Variance parameters (&#39;lambda&#39;):
-## Estimate of rho ( gridcode CAR):  0.174 
-## Estimate of lambda factor ( gridcode CAR):  0.1548 
-##              --- Coefficients for inverse[ lambda_i =var(V&#39;u) ]:
-##     Group        Term Estimate Cond.SE
-##  gridcode (Intercept)     6.46   1.716
-##  gridcode        adjd   -1.124   0.301
+## lambda = var(u) for u ~ Gaussian; 
+##    gridcode  :  0.1379  
 ## # of obs: 56; # of groups: gridcode, 56 
 ##  ------------- Likelihood values  -------------
+##                        logLik
+## p_v(h) (marginal L): -163.778</code></pre>
+</div>
+</div>
+</div>
+<div id="the-real-data-stary-dogs" class="section level2">
+<h2>The real data (Stary dogs)</h2>
+<div id="function" class="section level3">
+<h3>Function</h3>
+<div id="pdf_plot" class="section level4">
+<h4>pdf_Plot</h4>
+<pre class="r"><code>pdf_plot &lt;- function(x, idx = c(rep(TRUE, length(x)))){
+  g = ggplot()+
+    geom_histogram(aes(x = x[idx], y = ..density..), 
+                   fill = &#39;#557C55&#39;, alpha = 0.8)+
+    geom_density(aes(x = x[idx], y = ..density..), 
+                 color = &#39;#062C30&#39;, size = 1)+
+    theme_bw()
+  return(g)
+}</code></pre>
+</div>
+<div id="point_plot" class="section level4">
+<h4>Point_Plot</h4>
+<pre class="r"><code>point_plot &lt;- function(x,county, idx = c(rep(TRUE, length(x)))){
+  idx.c = Variable_df$COUNTYNAME == county
+  df = Variable_df[idx.c,]
+  g = ggplot()+
+    geom_point(aes(x = df$X[idx], y = df$Y[idx], color = x[idx] , size = abs(x[idx])))+
+     scale_colour_gradient2(low = &quot;#313552&quot;,mid = &quot;#FBF8F1&quot;, high = &quot;#632626&quot;)
+  
+  
+  return(g)
+}</code></pre>
+<p>使用 <code>spaMM</code> 作為主要使用的套件</p>
+</div>
+</div>
+<div id="tidy-the-data" class="section level3">
+<h3>Tidy the data</h3>
+<pre class="r"><code>path = &#39;..\\..\\Roaming-Dogs-Data\\&#39;
+
+# Variable_df &lt;- read.csv(paste0(path, &quot;@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp&quot; ), fileEncoding = &#39;utf-8&#39;)
+Variable_shp&lt;-shapefile(paste0(path, &quot;@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp&quot; ),encoding = &#39;utf-8&#39;)</code></pre>
+<pre><code>## Warning in OGRSpatialRef(dsn, layer, morphFromESRI = morphFromESRI,
+## dumpSRS = dumpSRS, : Discarded datum Taiwan_Datum_1997 in Proj4 definition:
+## +proj=tmerc +lat_0=0 +lon_0=121 +k=0.9999 +x_0=250000 +y_0=0 +ellps=GRS80
+## +towgs84=0,0,0,0,0,0,0 +units=m +no_defs</code></pre>
+<pre class="r"><code>Variable_shp@data[&quot;School&quot;] &lt;- rowSums(Variable_shp@data[c(&quot;Ele&quot;,&quot;Junior&quot; ,&quot;Senior&quot;)])
+Variable_shp@data[&quot;Student&quot;] &lt;- rowSums(Variable_shp@data[c(&quot;Ele_stu&quot;,&quot;Junior_stu&quot; ,&quot;Senior_stu&quot;)])
+Variable_shp@data[is.na(Variable_shp@data)] &lt;- 0
+
+Variable_shp@data$Nr = Variable_shp@data$Nr %&gt;% as.integer()</code></pre>
+<pre class="r"><code>counties = &quot;臺北市&quot;
+idx.county = Variable_shp@data$COUNTYNAME == counties
+sum(idx.county)</code></pre>
+<pre><code>## [1] 37</code></pre>
+<pre class="r"><code>col_X = 
+  c( &quot;Cluster&quot;,# 分群
+     &quot;Hospital&quot;,&quot;Clinic&quot;, &quot;Temple&quot;, &quot;School&quot;, &quot;Train.stat&quot;, # 公共建設
+     &quot;Student&quot;, &quot;Train.crow&quot;, # 人流
+     &quot;high_rat&quot;,   &quot;mid_rat&quot;,&quot;low_rat&quot;, &quot;M_F_RAT&quot; ,&quot;P_H_CNT&quot;,&quot;H_CNT&quot;, &quot;P_DEN&quot;, &quot;YOUN_DEP&quot;,&quot;OLD_DEP&quot;,&quot;AGING_IDX&quot;, # 人口統計(教育程度、人口密度...)
+     &quot;Income_mea&quot;,&quot;Income_sta&quot;, # 村里收入
+     &quot;Area_sqkm&quot;) 
+col_y = c(&quot;Nr&quot;)</code></pre>
+<pre class="r"><code>for(i in c(col_X, col_y, &quot;P_CNT&quot;, &quot;X&quot;,&quot;Y&quot;)){
+  
+  Variable_shp@data[i] = sapply(Variable_shp@data[i], function(x) as.numeric(x))
+}</code></pre>
+<pre class="r"><code>Variable_df = Variable_shp@data</code></pre>
+</div>
+</div>
+<div id="cluster" class="section level1">
+<h1>Cluster</h1>
+<pre class="r"><code>for (i in c(1:4)){
+  
+print(sum(Variable_df$Cluster[idx.county] == i))
+  
+}</code></pre>
+<pre><code>## [1] 37
+## [1] 0
+## [1] 0
+## [1] 0</code></pre>
+<pre class="r"><code>g = ggplot(data = Variable_df[Variable_df$COUNTYNAME == counties, ])+
+  geom_boxplot(aes(x = as.factor(Cluster), y = Nr))
+g</code></pre>
+<p><img src="data:image/png;base64,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" width="768" /></p>
+<div id="correlation" class="section level3">
+<h3>Correlation</h3>
+<pre class="r"><code>corr = cor(Variable_df[Variable_df$COUNTYNAME == counties, c(col_y, col_X)])</code></pre>
+<pre><code>## Warning in cor(Variable_df[Variable_df$COUNTYNAME == counties, c(col_y, : 標準差
+## 為零</code></pre>
+<pre class="r"><code>idx = abs(corr[,col_y])&gt;.15
+col_X_02 = names(idx)[idx]; col_X_02 = col_X_02[col_X_02 != col_y]
+
+corr[idx,idx]</code></pre>
+<pre><code>##                   Nr &lt;NA&gt;       Clinic     high_rat      mid_rat     low_rat
+## Nr         1.0000000   NA -0.238632782 -0.418791979  0.394456755  0.38982987
+## &lt;NA&gt;              NA   NA           NA           NA           NA          NA
+## Clinic    -0.2386328   NA  1.000000000  0.149085006 -0.006350696 -0.19465167
+## high_rat  -0.4187920   NA  0.149085006  1.000000000 -0.838610322 -0.97388830
+## mid_rat    0.3944568   NA -0.006350696 -0.838610322  1.000000000  0.69304358
+## low_rat    0.3898299   NA -0.194651672 -0.973888302  0.693043577  1.00000000
+## M_F_RAT    0.3417714   NA -0.274527688 -0.757312989  0.425293627  0.82497523
+## P_H_CNT    0.1554213   NA  0.152750423 -0.003757197  0.136290601 -0.05182953
+## H_CNT     -0.3655955   NA  0.244242727  0.392120403 -0.236494603 -0.42036666
+## P_DEN     -0.4848630   NA  0.370324375  0.446851204 -0.309450638 -0.46239130
+## YOUN_DEP  -0.3739723   NA  0.253179956  0.459190192 -0.332638320 -0.46905674
+## AGING_IDX  0.2360378   NA -0.218942563 -0.211226000 -0.005871652  0.28198270
+## Area_sqkm  0.3981216   NA -0.196018190 -0.380137115  0.168538341  0.43283014
+##              M_F_RAT      P_H_CNT       H_CNT       P_DEN    YOUN_DEP
+## Nr         0.3417714  0.155421289 -0.36559549 -0.48486304 -0.37397232
+## &lt;NA&gt;              NA           NA          NA          NA          NA
+## Clinic    -0.2745277  0.152750423  0.24424273  0.37032437  0.25317996
+## high_rat  -0.7573130 -0.003757197  0.39212040  0.44685120  0.45919019
+## mid_rat    0.4252936  0.136290601 -0.23649460 -0.30945064 -0.33263832
+## low_rat    0.8249752 -0.051829532 -0.42036666 -0.46239130 -0.46905674
+## M_F_RAT    1.0000000 -0.187722346 -0.37966978 -0.45057744 -0.44066017
+## P_H_CNT   -0.1877223  1.000000000 -0.11095562  0.03810946  0.62675888
+## H_CNT     -0.3796698 -0.110955617  1.00000000  0.42433269  0.09762119
+## P_DEN     -0.4505774  0.038109462  0.42433269  1.00000000  0.41178948
+## YOUN_DEP  -0.4406602  0.626758883  0.09762119  0.41178948  1.00000000
+## AGING_IDX  0.4205116 -0.727769315 -0.11078477 -0.24443828 -0.81456342
+## Area_sqkm  0.5034037 -0.020009022 -0.41838147 -0.32617647 -0.35151325
+##              AGING_IDX   Area_sqkm
+## Nr         0.236037828  0.39812158
+## &lt;NA&gt;                NA          NA
+## Clinic    -0.218942563 -0.19601819
+## high_rat  -0.211226000 -0.38013711
+## mid_rat   -0.005871652  0.16853834
+## low_rat    0.281982699  0.43283014
+## M_F_RAT    0.420511584  0.50340365
+## P_H_CNT   -0.727769315 -0.02000902
+## H_CNT     -0.110784774 -0.41838147
+## P_DEN     -0.244438279 -0.32617647
+## YOUN_DEP  -0.814563417 -0.35151325
+## AGING_IDX  1.000000000  0.43325000
+## Area_sqkm  0.433250001  1.00000000</code></pre>
+</div>
+<div id="fitting-the-model" class="section level3">
+<h3>Fitting the model</h3>
+<div id="split-the-data-train-and-test" class="section level4">
+<h4>split the data (train and test)</h4>
+<pre class="r"><code>set.seed(111)
+n.train = as.integer(sum(idx.county)*0.8)
+VILL.train = Variable_df$VILLCODE[idx.county] %&gt;% sample(n.train)
+VILL.test = Variable_df$VILLCODE[idx.county][!(Variable_df$VILLCODE[idx.county] %in% VILL.train)]</code></pre>
+</div>
+<div id="make-the-dataframe" class="section level4">
+<h4>Make the dataframe</h4>
+<pre class="r"><code>resi.fit.df = data.frame(VILLCODE = Variable_df$VILLCODE[idx.county],
+                         COUNTYNAME = Variable_df$COUNTYNAME[idx.county],
+                         TOWNNAME = Variable_df$TOWNNAME[idx.county],
+                         VILLNAME = Variable_df$VILLNAME[idx.county],
+                         X = Variable_df$X[idx.county],
+                         Y = Variable_df$Y[idx.county],
+                         Nr= Variable_df$Nr[idx.county],
+                         Cluster = Variable_df$Cluster[idx.county],
+                         P_H_CNT = Variable_df$P_H_CNT[idx.county],
+                         Income_mea = Variable_df$Income_mea[idx.county],
+                         Area_sqkm = Variable_df$Area_sqkm[idx.county])</code></pre>
+</div>
+<div id="fitting-the-data" class="section level4">
+<h4>Fitting the data</h4>
+<pre class="r"><code># Nr~Cluster+School+Temple+P_H_CNT+Income_mea+Area_sqkm+Matern(1|X+Y)
+
+glmm_ComPo_C = fitme(Nr~Temple+P_H_CNT+Area_sqkm+Cauchy(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X,  &quot;X&quot;, &quot;Y&quot;)], 
+      family = COMPoisson())
+glmm_ComPo_M = fitme(Nr~Temple+P_H_CNT+Area_sqkm+Matern(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X,  &quot;X&quot;, &quot;Y&quot;)], 
+      family = COMPoisson())</code></pre>
+<pre class="r"><code>cat(&quot;================= Cauchy Matrix =================\n\n&quot;)</code></pre>
+<pre><code>## ================= Cauchy Matrix =================</code></pre>
+<pre class="r"><code>glmm_ComPo_C %&gt;% summary()</code></pre>
+<pre><code>## formula: Nr ~ Temple + P_H_CNT + Area_sqkm + Cauchy(1 | X + Y)
+## Estimation of corrPars, lambda and COMP_nu by Laplace ML approximation (p_v).
+## Estimation of fixed effects by Laplace ML approximation (p_v).
+## Estimation of lambda and COMP_nu by &#39;outer&#39; ML, maximizing p_v.
+## family: COMPoisson(nu=1.193)( link = loglambda ) 
+##  ------------ Fixed effects (beta) ------------
+##             Estimate Cond. SE t-value
+## (Intercept)  -1.5726   4.2478 -0.3702
+## Temple        0.3164   0.3859  0.8200
+## P_H_CNT       1.0669   1.6560  0.6443
+## Area_sqkm     0.1866   0.1014  1.8394
+##  --------------- Random effects ---------------
+## Family: gaussian( link = identity ) 
+##                    --- Correlation parameters:
+##      1.shape    1.longdep        1.rho 
+##  0.520117687 12.373106118  0.002429456 
+##            --- Variance parameters (&#39;lambda&#39;):
+## lambda = var(u) for u ~ Gaussian; 
+##    X + Y  :  2.606  
+## # of obs: 29; # of groups: X + Y, 29 
+##  ------------- Likelihood values  -------------
 ##                         logLik
-## p_v(h) (marginal L): -161.5141
-##   p_beta,v(h) (ReL): -163.6783
-## lambda leverages numerically 1 were replaced by 1- 1e-08 (as controlled by option &#39;regul_lev_lambda&#39;)</code></pre>
+## p_v(h) (marginal L): -88.07838</code></pre>
+<pre class="r"><code>cat(&quot;\n\n================= Matern Matrix =================\n\n&quot;)</code></pre>
+<pre><code>## 
+## 
+## ================= Matern Matrix =================</code></pre>
+<pre class="r"><code>glmm_ComPo_M %&gt;% summary()</code></pre>
+<pre><code>## formula: Nr ~ Temple + P_H_CNT + Area_sqkm + Matern(1 | X + Y)
+## Estimation of corrPars, lambda and COMP_nu by Laplace ML approximation (p_v).
+## Estimation of fixed effects by Laplace ML approximation (p_v).
+## Estimation of lambda and COMP_nu by &#39;outer&#39; ML, maximizing p_v.
+## family: COMPoisson(nu=1.193)( link = loglambda ) 
+##  ------------ Fixed effects (beta) ------------
+##             Estimate Cond. SE t-value
+## (Intercept)  -1.5731   4.2476 -0.3704
+## Temple        0.3164   0.3858  0.8201
+## P_H_CNT       1.0671   1.6559  0.6444
+## Area_sqkm     0.1865   0.1014  1.8394
+##  --------------- Random effects ---------------
+## Family: gaussian( link = identity ) 
+##                    --- Correlation parameters:
+##       1.nu      1.rho 
+## 4.81475756 0.03153694 
+##            --- Variance parameters (&#39;lambda&#39;):
+## lambda = var(u) for u ~ Gaussian; 
+##    X + Y  :  2.606  
+## # of obs: 29; # of groups: X + Y, 29 
+##  ------------- Likelihood values  -------------
+##                         logLik
+## p_v(h) (marginal L): -88.07836</code></pre>
+<pre class="r"><code>Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X,  &quot;X&quot;, &quot;Y&quot;),]</code></pre>
+<pre><code>##     Nr Cluster Hospital Clinic Temple School Train.stat Student Train.crow
+## 546  0       1        0      0      0      0          0       0      0.000
+## 549  6       1        0      0      0      1          0     659      0.000
+## 550 38       1        0      1      0      0          0       0      0.000
+## 551  1       1        0      3      0      2          0    1419      0.000
+## 553 26       1        0      1      2      0          0       0      0.000
+## 554  3       1        0      0      1      1          1     513   7955.464
+## 555  8       1        0      0      2      1          0    1418      0.000
+## 556  1       1        0      6      0      0          0       0      0.000
+## 559 22       1        0      1      0      0          0       0      0.000
+## 560  2       1        0      0      0      0          0       0      0.000
+## 561  0       1        0      1      0      0          0       0      0.000
+## 562 10       1        1      3      1      1          0     503      0.000
+## 563  0       1        0      0      1      0          0       0      0.000
+## 564  5       1        0      0      2      0          0       0      0.000
+## 565  5       1        0      0      0      0          0       0      0.000
+## 566  0       1        0      0      0      0          0       0      0.000
+## 567  0       1        0      4      1      3          0    4065      0.000
+## 569  1       1        0      1      2      0          0       0      0.000
+## 570 10       1        0      3      0      1          0    1690      0.000
+## 571  0       1        0      3      0      0          0       0      0.000
+## 572  9       1        0      5      0      0          0       0      0.000
+## 574 12       1        0      0      0      0          0       0      0.000
+## 575  0       1        0      1      0      0          0       0      0.000
+## 576 18       1        0      0      1      3          0    3604      0.000
+## 577  4       1        0      3      3      0          0       0      0.000
+## 578  3       1        0      3      0      0          0       0      0.000
+## 580  2       1        0      2      0      0          0       0      0.000
+## 581 10       1        0      7      0      0          0       0      0.000
+## 583 28       1        0      0      0      1          0      77      0.000
+##      high_rat   mid_rat   low_rat M_F_RAT P_H_CNT H_CNT    P_DEN YOUN_DEP
+## 546 0.5061140 0.3413471 0.1525389   94.13    2.58  2214 35529.62    22.85
+## 549 0.4841772 0.3164557 0.1993671   95.31    2.47  1062  8826.85    22.33
+## 550 0.3574207 0.4116684 0.2309110   91.73    2.65  2111 22098.99    17.43
+## 551 0.3555082 0.3802555 0.2642363   99.46    2.51  1767 40566.28    22.46
+## 553 0.4822498 0.3622754 0.1554748   88.95    2.43  2184  9456.12    16.44
+## 554 0.2841579 0.3864976 0.3293445  123.33    1.88  3214 31196.10    10.60
+## 555 0.6054085 0.2891123 0.1054793   88.27    2.51  3349 32071.27    25.53
+## 556 0.4924916 0.3597916 0.1477168   90.96    2.62  3011 87176.37    25.48
+## 559 0.3380664 0.4050950 0.2568386   93.22    2.52  2156 18968.56    16.30
+## 560 0.5947341 0.2960764 0.1091895   89.88    2.27  1928 26830.69    17.63
+## 561 0.5237258 0.3424136 0.1338606   88.63    2.65  1564 66341.46    27.76
+## 562 0.3875143 0.4065474 0.2059383   96.07    2.36  1248  8981.21    16.01
+## 563 0.3679155 0.3945725 0.2375120   90.46    2.31  2084 39246.57    18.62
+## 564 0.2991766 0.3982922 0.3025313   97.73    2.51  1490  2222.79    16.53
+## 565 0.5231299 0.3609744 0.1158957   76.05    2.28  2050 80876.25    18.93
+## 566 0.4605006 0.3696077 0.1698917   88.13    2.54  2566 33446.10    20.31
+## 567 0.4082938 0.3852758 0.2064304   90.73    2.57  2588 31081.07    26.12
+## 569 0.2634680 0.3817340 0.3547980   99.41    2.33  1160 24831.01    16.79
+## 570 0.4328358 0.3834349 0.1837292   91.34    2.90  2047 68745.66    28.46
+## 571 0.4623609 0.3690218 0.1686173   89.31    2.44  3142 42527.89    12.97
+## 572 0.3324339 0.4031301 0.2644360   94.11    2.61  1618 21408.00    17.74
+## 574 0.2874187 0.3862721 0.3263093  100.92    2.80  2661 36681.54    19.18
+## 575 0.4899194 0.3574597 0.1526210   89.02    2.56  2197 38376.88    17.12
+## 576 0.4318123 0.3642691 0.2039185   94.10    2.39  1821  4004.48    16.77
+## 577 0.4082792 0.3808442 0.2108766   90.31    2.70  2754 21168.61    25.23
+## 578 0.4193621 0.3834232 0.1972147   90.39    2.85  1924 14760.10    28.83
+## 580 0.4498001 0.3689161 0.1812838   87.76    2.76  1906 43452.06    29.47
+## 581 0.3675100 0.3784288 0.2540613   92.81    2.52  3382 42305.82    16.14
+## 583 0.2229965 0.3937282 0.3832753  120.28    2.47   378    57.04    10.72
+##     OLD_DEP AGING_IDX Income_mea Income_sta   Area_sqkm        X       Y
+## 546   25.45    111.35       1067    1533.39  0.16266812 304716.1 2765778
+## 549   23.10    103.47       1113    1457.21  0.29320542 303299.8 2767460
+## 550   26.20    150.29        716     728.51  0.29404526 305818.7 2767672
+## 551   27.82    123.87        887    1232.77  0.10872543 300342.5 2768559
+## 553   33.33    202.75       1705    6816.22  0.55931299 307742.0 2769144
+## 554   34.33    323.76        809    1201.10  0.19479068 300704.6 2769694
+## 555   37.40    146.46       1610    2454.51  0.26031169 304016.0 2769850
+## 556   26.83    105.31       1062    1401.76  0.09003463 308218.6 2770032
+## 559   24.23    148.65        752     889.45  0.27235808 309611.3 2769888
+## 560   39.05    221.54       1471    2251.11  0.16531670 303597.8 2770363
+## 561   29.78    107.25       1178    1760.71  0.06115359 305823.7 2771022
+## 562   33.60    209.84        969    1433.32  0.32760622 301308.2 2771508
+## 563   30.13    161.79        891    1314.62  0.12261662 301842.2 2771642
+## 564   23.28    140.86        652     781.93  1.72078982 311256.1 2771041
+## 565   32.08    169.45       1084    1605.06  0.05707831 306980.5 2772315
+## 566   32.30    159.05       1065    1639.51  0.19360011 303983.7 2772545
+## 567   23.27     89.10        961    1305.72  0.21253108 302109.2 2772671
+## 569   32.30    192.43        645     800.02  0.11443763 301344.6 2773010
+## 570   12.92     45.40        922    1057.19  0.09316913 311689.8 2773843
+## 571   24.88    191.81       1008    1395.57  0.19354977 308684.7 2774380
+## 572   24.41    137.57        736    1049.07  0.19289282 301640.2 2775385
+## 574   24.54    127.94        640     737.25  0.20372906 301136.9 2776101
+## 575   33.51    195.77       1171    2190.82  0.14658907 303181.4 2777625
+## 576   32.20    192.02       1064    1697.58  1.10400274 301774.2 2777431
+## 577   22.47     89.06        949    1343.34  0.34550541 301427.7 2778167
+## 578   25.29     87.72        957    1241.36  0.37026643 301014.8 2778299
+## 580   24.69     83.80       1056    1276.08  0.11363906 301959.0 2778905
+## 581   25.78    159.75        937    1455.15  0.27325226 300276.9 2780216
+## 583   32.31    301.43        854    2402.78 16.71752561 305238.6 2785782</code></pre>
 </div>
 </div>
 </div>

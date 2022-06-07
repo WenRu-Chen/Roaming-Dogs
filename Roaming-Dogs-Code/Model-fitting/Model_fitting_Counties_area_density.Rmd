@@ -358,9 +358,9 @@ VILL.train = Variable_df$VILLCODE[idx.county] %>% sample(n.train)
 VILL.test = Variable_df$VILLCODE[idx.county][!(Variable_df$VILLCODE[idx.county] %in% VILL.train)]
 
 # Nr~Cluster+School+Temple+P_H_CNT+Income_mea+Area_sqkm+Matern(1|X+Y)
-glmm_ComPo_C = fitme(Nr~P_H_CNT+Area_sqkm+Cauchy(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X_03,  "X", "Y"),], 
+glmm_ComPo_C = fitme(Nr~P_H_CNT+offset(log(Area_sqkm))+Cauchy(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X_03,  "X", "Y"),], 
       family = COMPoisson())
-glmm_ComPo_M = fitme(Nr~P_H_CNT+Area_sqkm+Matern(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X_03,  "X", "Y")], 
+glmm_ComPo_M = fitme(Nr~P_H_CNT+offset(log(Area_sqkm))+Matern(1|X+Y),data= Variable_df[Variable_df$VILLCODE %in% VILL.train, c(col_y, col_X_03,  "X", "Y")], 
       family = COMPoisson())
 
 ```
@@ -376,10 +376,20 @@ res.resp = residuals(glmm_ComPo,  type = "response")
 residual_df$glmm_ComPo.fit = fit ;residual_df$glmm_ComPo.res.resp = res.resp
 ```
 ```{r}
-
+library(ggplot2)
 qplot(x =  Variable_df[Variable_df$VILLCODE %in% VILL.train, "Nr"], y = residuals(glmm_ComPo_C,  type = "response")); 
 qplot(x =  Variable_df[Variable_df$VILLCODE %in% VILL.train, "Nr"], y = residuals(glmm_ComPo_M,  type = "response"))
 ```
+```{r}
+data = data.frame(y = Variable_df[Variable_df$VILLCODE %in% VILL.train, "Nr"] , 
+                     res = residuals(glmm_ComPo_C,  type = "response"),
+                     lab = Variable_df[Variable_df$VILLCODE %in% VILL.train, "VILLNAME"])
+data
+ggplot(data)+
+  geom_point(aes(x = Nr , y = res))+
+  geom_text(aes(x = Nr , y =res , label = lab))
+```
+
 ```{r}
 predict(glmm_ComPo,  newdata = Variable_df[Variable_df$VILLCODE %in% VILL.test, c(col_X_03,  "X", "Y")],type = "response")
 Variable_df[Variable_df$VILLCODE %in% VILL.test, "Nr"]

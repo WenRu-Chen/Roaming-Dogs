@@ -19,11 +19,19 @@ library(MASS)
 library(spaMM)
 library(dplyr)
 library(ggplot2)
+library(raster)
+library(latex2exp) # 在ggplot 中使用latex
 ```
 
 ## reference
 
-- <https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf>.
+`spaMM`:
+- <https://kimura.univ-montp2.fr/~rousset/spaMM/spaMMintro.pdf>
+- <https://www.r-bloggers.com/2019/09/spatial-regression-in-r-part-1-spamm-vs-glmmtmb/>
+**簡單介紹spaMM**
+
+- <file:///C:/Users/ChenWenRu/Downloads/A_Review_of_Software_for_Spatial_Econometrics_in_R.pdf> **介紹很多模型以及可以用甚麼R套件**
+
 
 ## Matérn covariance function
 
@@ -36,6 +44,7 @@ $$C_{\nu}(d) = {\sigma^2}\frac{2^{1-\nu}}{\Gamma(\nu)}(\sqrt{2\nu}\frac{d}{\rho}
 - $d$: 兩點的距離 \n
 - $\Gamma(.)$: $\Gamma(.)$ 函數 \n
 - $\rho, \nu$: 非負參數，$\rho$ 為 scale parameter(尺度參數)，$\nu$ 為 smoothing parameter(平滑參數)，越大越平滑 \n
+- ${\displaystyle K_{\nu }}$: 第二類貝索函數 \n
 
 當$\nu = 0.5$: \n
 
@@ -44,6 +53,16 @@ $$C_{\nu = 0.5}(d) = {\sigma^2}exp(-\frac{d}{\rho})$$
 當$\nu \rightarrow \infty$: \n
 
 $$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp(-\frac{d^2}{\rho^2})$$
+```{r plot}
+nu = .5; rho = 1
+
+dd <- runif(10000, 0,100)
+mm <- MaternCorr(dd, nu = nu, rho = rho)
+
+qplot(x = dd, y = mm)
+
+plot(as.numeric(dd), as.numeric(mm), xlab = "Distance between pairs of location [in m]", ylab = "Estimated correlation")
+```
 
 **不過`spaMM`的 $\rho$ 是這邊的`倒數`，因為這篇文章說 $C_{\nu = 0.5}(d) = {\sigma^2}exp(-{d}{\rho})$，$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp({-d^2}{\rho^2})$**
 
@@ -116,12 +135,8 @@ Conway-Maxwell-Poisson 是以計數型的 Poisson 為基礎發展出來的分配
 $$Pr(y;\lambda, \nu_{CMP}) = \frac{\lambda^y}{(y!)^{\nu_{CMP}}Z(\lambda, \nu_{CMP})}$$
 $$Z(\lambda, \nu_{CMP}) = \sum^ \infty_{k=0}\frac{\lambda^k}{(k!)^{\nu_{CMP}}}$$
 
-- $\nu_{CMP}$: 其值越小，分布程度越廣(overdispersion); 其值越大，分布程度越集中(underdispersion);$\nu_{CMP} = 1$ 的時候就是poisson 分配。
+- $\nu_{CMP}$: 其值越小，分布程度越廣(overdispersion); 其值越大，分布程度越集中(underdispersion);$\nu_{CMP} = 1$ 的時候就是 poisson 分配。
 
-
-###  The main procedures in `spaMM`
-
-#### 
 
 ## Further examples
 
@@ -177,4 +192,578 @@ data=scotlip,family=COMPoisson(nu = .9),adjMatrix=Nmatrix)
 summary(lipfit_com)
 ```
 
+## The real data (Stary dogs)
+
+### Function 
+
+#### pdf_Plot
+
+```{r pdf_Plot}
+pdf_plot <- function(x, idx = c(rep(TRUE, length(x)))){
+  g = ggplot()+
+    geom_histogram(aes(x = x[idx], y = ..density..), 
+                   fill = '#557C55', alpha = 0.8)+
+    geom_density(aes(x = x[idx], y = ..density..), 
+                 color = '#062C30', size = 1)+
+    theme_bw()
+  return(g)
+}
+```
+
+#### Point_Plot
+
+```{r Point_Plot}
+point_plot <- function(x,county, idx = c(rep(TRUE, length(x)))){
+  idx.c = Variable_df$COUNTYNAME == county
+  df = Variable_df[idx.c,]
+  g = ggplot()+
+    geom_point(aes(x = df$X[idx], y = df$Y[idx], color = x[idx] , size = abs(x[idx])))+
+     scale_colour_gradient2(low = "#313552",mid = "#FBF8F1", high = "#632626")
+  
+  
+  return(g)
+}
+```
+
+
+
+使用 `spaMM` 作為主要使用的套件
+
+### Tidy the data 
+```{r Load data}
+path = '..\\..\\Roaming-Dogs-Data\\'
+
+# Variable_df <- read.csv(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ), fileEncoding = 'utf-8')
+Variable_shp<-shapefile(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ),encoding = 'utf-8')
+Variable_shp@data["School"] <- rowSums(Variable_shp@data[c("Ele","Junior" ,"Senior")])
+Variable_shp@data["Student"] <- rowSums(Variable_shp@data[c("Ele_stu","Junior_stu" ,"Senior_stu")])
+Variable_shp@data[is.na(Variable_shp@data)] <- 0
+
+Variable_shp@data$Nr = Variable_shp@data$Nr %>% as.integer()
+```
+
+```{r Varaible name 01 original}
+counties = "高雄市"
+idx.county = Variable_shp@data$COUNTYNAME == counties
+sum(idx.county)
+col_X = 
+  c( "Cluster",# 分群
+     "Hospital","Clinic", "Temple", "School", "Train.stat", # 公共建設
+     "Student", "Train.crow", # 人流
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" ,"P_H_CNT","H_CNT", "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta", # 村里收入
+     "Area_sqkm") 
+col_y = c("Nr")
+```
+
+```{r 轉成數值}
+for(i in c(col_X, col_y, "P_CNT", "X","Y")){
+  
+  Variable_shp@data[i] = sapply(Variable_shp@data[i], function(x) as.numeric(x))
+}
+```
+
+```{r Variable_df}
+  
+Variable_df = Variable_shp@data
+
+```
+
+比例
+### Cluster
+
+```{r}
+for (i in c(1:4)){
+  
+print(sum(Variable_df$Cluster[idx.train] == i))
+  
+}
+```
+
+```{r 分層的盒需圖}
+g = ggplot(data = Variable_df[idx.train, ])+
+  geom_boxplot(aes(x = as.factor(Cluster), y = Nr))
+g
+```
+
+### Correlation
+```{r correlation}
+corr = cor(Variable_df[Variable_df$COUNTYNAME == counties, c(col_y, col_X)])
+idx = abs(corr[,col_y])>.15
+col_X_02 = names(idx)[idx]; col_X_02 = col_X_02[col_X_02 != col_y]
+
+corr[idx,idx]
+```
+
+```{r}
+GGally::ggpairs(Variable_df[idx.train, c(col_y, col_X,  "X", "Y")], columns =c("School","Temple","Clinic","P_H_CNT","Area_sqkm",col_y))
+```
+
+
+### Fitting the model
+#### split the data (train and test)
+```{r split the data function}
+split.the.data <- function(idx.county, p){ # p = training data 的比例
+    set.seed(112)
+    n.train = as.integer(sum(idx.county)*p)
+    VILL.train = Variable_df$VILLCODE[idx.county] %>% sample(n.train)
+    idx.train = Variable_df$VILLCODE %in% VILL.train
+    VILL.test = Variable_df$VILLCODE[idx.county][!(Variable_df$VILLCODE[idx.county] %in% VILL.train)]
+    idx.test = Variable_df$VILLCODE %in% VILL.test
+    cat("train :", sum(idx.train),"; test: ",sum(idx.test) )
+    idx.list = list(idx.train, idx.test)
+    names(idx.list) = c("idx.train", "idx.test")
+    return(idx.list)
+}
+
+idx.list = split.the.data(idx.county = Variable_df$COUNTYNAME == "高雄市", p = 0.8)
+```
+
+
+#### Make the dataframe
+```{r residual_df }
+resi.fit.df = data.frame(VILLCODE = Variable_df$VILLCODE[idx.train],
+                         COUNTYNAME = Variable_df$COUNTYNAME[idx.train],
+                         TOWNNAME = Variable_df$TOWNNAME[idx.train],
+                         VILLNAME = Variable_df$VILLNAME[idx.train],
+                         X = Variable_df$X[idx.train],
+                         Y = Variable_df$Y[idx.train],
+                         Nr= Variable_df$Nr[idx.train],
+                         Cluster = Variable_df$Cluster[idx.train],
+                         P_H_CNT = Variable_df$P_H_CNT[idx.train],
+                         Clinic = Variable_df$P_H_CNT[idx.train],
+                         School = Variable_df$P_H_CNT[idx.train],
+                         Income_mea = Variable_df$Income_mea[idx.train],
+                         Area_sqkm = Variable_df$Area_sqkm[idx.train])
+
+```
+
+#### Fitting the data 
+```{r}
+counties = unique(Variable_df$COUNTYNAME)
+```
+##### model01
+
+```{r no train and test 01}
+# # Nr~Cluster+School+Temple+P_H_CNT+Income_mea+Area_sqkm+Matern(1|X+Y)
+# path.mod = "C:/@@Roaming_Dogs_Data_Analysis/Roaming-Dogs-Code/Model-fitting/model/model01/No_train_test"
+# # path.mod = "Roaming-Dogs-Code/Model-fitting/model/model01/No_train_test/"
+# col_X_03 = c("Cluster", "P_H_CNT", "Area_sqkm")
+# 
+# for (i in counties[counties!= "連江縣"]){
+#   
+#   idx.county = Variable_df$COUNTYNAME == i
+#   print(sprintf("%s : %.0f",i, sum(idx.county)))
+# 
+#   if( i == "臺北市"){
+#     
+#     var_X = paste(col_X_03[col_X_03 != "Cluster"], collapse = " + ")
+#     
+#   }else{
+#     
+#     var_X = paste(col_X_03, collapse = " + ")
+#   }
+#   
+# # spaMM_fitting
+#   
+#   for (corr in c("Cauchy", "Matern")){
+#     
+#     spa_random = sprintf("%s(1|X+Y)", corr)
+#     f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+#     
+#     glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = COMPoisson())
+#     file.name = paste0(path.mod, sprintf("/%s/%s_%s.rds",corr, corr,i))
+#     saveRDS(glmm_ComPo, file.name)
+# 
+# # spaMM_fitting_plot
+#     getwd()
+#     
+#     plot.name =  paste0(sprintf("model/model01/No_train_test/%s/Plot/%s_Fit_res_%s.png",corr, corr,i))
+#     fit = predict(glmm_ComPo,type = "response")
+#     res = residuals(glmm_ComPo,  type = "response")
+#     p = ggplot()+
+#       geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+#       xlab(TeX("$\\hat{Nr}$"))+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
+#     p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+#     
+#     plot.name =  paste0(sprintf("model/model01/No_train_test/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+#     p = ggplot()+
+#     geom_point(aes(x = Variable_df[idx.county, "Nr"], y = as.vector(res)))+
+#     xlab("Nr")+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  "Nr vs. residuals")
+#     p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+#     
+#   }
+#     
+# }
+
+```
+
+```{r train and test 01 Not yet}
+# # Nr~Cluster+School+Temple+P_H_CNT+Income_mea+Area_sqkm+Matern(1|X+Y)
+path.mod = "C:/@@Roaming_Dogs_Data_Analysis/Roaming-Dogs-Code/Model-fitting/model/model01/Train_test"
+# path.mod = "Roaming-Dogs-Code/Model-fitting/model/model01/Train_test/"
+col_X_03 = c("Cluster", "P_H_CNT", "Area_sqkm")
+i = "新竹市"; corr = "Matern"
+
+
+for (i in counties[counties!= "連江縣"]){
+
+  idx.county = Variable_df$COUNTYNAME == i
+  print(sprintf("%s : %.0f",i, sum(idx.county)))
+  idx.list = split.the.data(idx.county, .8)
+  idx.train = idx.list$idx.train ; idx.test = idx.list$idx.test
+
+  if( i == "臺北市"){
+
+    var_X = paste(col_X_03[col_X_03 != "Cluster"], collapse = " + ")
+
+  }else{
+
+    var_X = paste(col_X_03, collapse = " + ")
+  }
+
+# spaMM_fitting
+
+  for (corr in c("Cauchy", "Matern")){
+
+    spa_random = sprintf("%s(1|X+Y)", corr)
+    f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+
+    glmm_ComPo = fitme(f,data= Variable_df[idx.train, c(col_y, col_X,  "X", "Y")], family = COMPoisson())
+    file.name = paste0(path.mod, sprintf("/%s/%s_%s.rds",corr, corr,i))
+    saveRDS(glmm_ComPo, file.name)
+
+# spaMM_fitting_plot
+    getwd()
+
+    plot.name =  paste0(sprintf("model/model01/Train_test/%s/Plot/%s_Fit_res_%s.png",corr, corr,i))
+    fit = predict(glmm_ComPo,type = "response")
+    res = residuals(glmm_ComPo,  type = "response")
+    pre = predict(glmm_ComPo, newdata = Variable_df[idx.test, c(col_y, col_X,  "X", "Y")],type = "response")
+    
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("$\\hat{Nr}$ vs. residuals"), sprintf("train, n = %d", sum(idx.train))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+
+    plot.name =  paste0(sprintf("model/model01/Train_test/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+    p = ggplot()+
+    geom_point(aes(x = Variable_df[idx.train, "Nr"], y = as.vector(res)))+
+    xlab("Nr")+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("Nr vs. residuals"), sprintf("n = %d", sum(idx.train))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    plot.name =  paste0(sprintf("model/model01/Train_test/%s/Plot/%s_pre_res_%s.png",corr, corr,i))
+    p = ggplot()+
+    geom_point(aes(x = Variable_df[idx.train, "Nr"], y = as.vector(res)))+
+    xlab("Predict")+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle = paste(TeX("Predict vs. residuals"), sprintf("test, n = %d", sum(idx.test))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+
+  }
+
+}
+
+```
+
+##### model02
+
+新增新的
+
+```{r}
+# Nr~Cluster+School+Temple+P_H_CNT+Income_mea+Area_sqkm+Matern(1|X+Y)
+getwd()
+n = "02"
+path =paste0( getwd(), sprintf("/model/model%s/No_train_test", n))
+col_X_03 = c("Cluster", "P_H_CNT", "offset(log(Area_sqkm))")
+
+# for loop ====
+for (i in counties[counties!= "連江縣"]){
+  
+  idx.county = Variable_df$COUNTYNAME == i
+  print(sprintf("%s : %.0f",i, sum(idx.county)))
+
+  if( i == "臺北市"){
+    
+    var_X = paste(col_X_03[col_X_03 != "Cluster"], collapse = " + ")
+    
+  }else{
+    
+    var_X = paste(col_X_03, collapse = " + ")
+  }
+  
+# spaMM_fitting
+  
+  for (corr in c("Cauchy", "Matern")){
+    
+    spa_random = sprintf("%s(1|X+Y)", corr)
+    f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+    
+    glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = COMPoisson())
+    file.name = paste0(path, sprintf("/%s/%s_%s.rds",corr, corr,i))
+    saveRDS(glmm_ComPo, file.name)
+
+# spaMM_fitting_plot
+    getwd()
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_res_%s.png", corr, corr,i))
+    fit = predict(glmm_ComPo,type = "response")
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+    p = ggplot()+
+    geom_point(aes(x = Variable_df[idx.county, "Nr"], y = as.vector(res)))+
+    xlab("Nr")+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  "Nr vs. residuals")
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+  }
+    
+}
+```
+
+##### model03
+
+```{r}
+col_X_03 = c("Cluster", "P_H_CNT", "offset(log(Area_sqkm))")
+
+var_X = paste(col_X_03, collapse = " + ")
+var_X
+```
+```{r}
+n = "03"
+path =paste0( getwd(), sprintf("/model/model%s/No_train_test", n))
+col_X_03 = c("Cluster", "P_H_CNT", "offset(log(Area_sqkm))")
+
+# for loop ====
+for (i in counties[counties!= "連江縣"]){
+  
+  idx.county = Variable_df$COUNTYNAME == i
+  print(sprintf("%s : %.0f",i, sum(idx.county)))
+
+  if( i == "臺北市"){
+    
+    var_X = paste(col_X_03[col_X_03 != "Cluster"], collapse = " + ")
+    
+  }else{
+    
+    var_X = paste(col_X_03, collapse = " + ")
+  }
+  
+# spaMM_fitting
+  
+  for (corr in c("Cauchy", "Matern")){
+    
+    spa_random = sprintf("%s(1|X+Y)", corr)
+    f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+    
+    glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family=negbin())
+    file.name = paste0(path, sprintf("/%s/%s_%s.rds",corr, corr,i))
+    saveRDS(glmm_ComPo, file.name)
+
+# spaMM_fitting_plot
+    getwd()
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_res_%s.png", corr, corr,i))
+    fit = predict(glmm_ComPo,type = "response")
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+    p = ggplot()+
+    geom_point(aes(x = Variable_df[idx.county, "Nr"], y = as.vector(res)))+
+    xlab("Nr")+ ylab("residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  "Nr vs. residuals")
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+  }
+    
+}
+```
+
+##### model04 (random-slop)
+
+```{r}
+n = "04"
+path =paste0( getwd(), sprintf("/model/model%s/No_train_test", n))
+col_X_03_01 = c("Cluster",  "M_F_RAT", "H_CNT", "offset(log(Area_sqkm))")
+col_X_03_02 = "P_H_CNT"
+
+# for loop ====
+for (i in counties[counties!= "連江縣"]){
+  
+  idx.county = Variable_df$COUNTYNAME == i
+  print(sprintf("%s : %.0f",i, sum(idx.county)))
+# 
+#   if( i == "臺北市"){
+#     
+#     var_X = paste(col_X_03_01[col_X_03_01 != "Cluster"], collapse = " + ")
+#     
+#   }else{
+#     
+#     var_X = paste(col_X_03_01, collapse = " + ")
+#   }
+#   
+# # spaMM_fitting
+#   
+  for (corr in c("Cauchy", "Matern")){
+#     
+#     spa_random = sprintf("%s(0+%s|X+Y)", corr, col_X_03_02)
+#     f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+#     print(f)
+#     glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family=negbin(), method="REML" )
+    file.name = paste0(path, sprintf("/%s/%s_%s.rds",corr, corr,i))
+#     saveRDS(glmm_ComPo, file.name)
+  glmm_ComPo = readRDS(file.name)
+  
+
+# spaMM_fitting_plot
+    getwd()
+    # type = c("deviance", "pearson", "response", "std_dev_res")
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_resp_res_%s.png", corr, corr,i))
+    fit = predict(glmm_ComPo,type = "response")
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+ 
+      ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("$\\hat{Nr}$  vs. residuals"), sprintf("corr = %.4f", cor(fit, res))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_std_res_%s.png", corr, corr,i))
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_residuals")+ 
+      ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("$\\hat{Nr}$  vs. residuals"), sprintf("corr = %.4f", cor(fit, res))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    # plot.name =  paste0(path, sprintf("/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+    # p = ggplot()+
+    # geom_point(aes(x = Variable_df[idx.county, "Nr"], y = as.vector(res)))+
+    # xlab("Nr")+ ylab("std_dev_residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  "Nr vs. residuals")
+    # p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+  }
+    
+}
+```
+
+
+```{r Morians I}
+
+ozone.dists <- as.matrix(dist(cbind(Variable_df[idx.county, "X"], Variable_df[idx.county, "Y"])))
+
+ozone.dists.inv <- 1/ozone.dists
+diag(ozone.dists.inv) <- 0
+ 
+ozone.dists.inv[1:5, 1:5]
+ape::Moran.I(res, ozone.dists.inv)
+```
+
+
+
+```{r}
+res.cor.df = data.frame(x = as.character(), rho = as.numeric())
+
+for (i in c(1:length(col_X))){
+  var = col_X[i]
+  rho = cor(Variable_df[idx.county,var ],res) 
+  res.cor.df[i,] = c(var, rho)
+}
+```
+
+
+
+##### model05 (random-slop)
+
+```{r}
+n = "05"
+path =paste0( getwd(), sprintf("/model/model%s/No_train_test", n))
+col_X_03_01 = c("Cluster",  "P_H_CNT", "H_CNT", "offset(log(Area_sqkm))")
+col_X_03_02 = "M_F_RAT"
+
+# for loop ====
+for (i in counties[counties!= "連江縣"]){
+  
+  idx.county = Variable_df$COUNTYNAME == i
+  print(sprintf("%s : %.0f",i, sum(idx.county)))
+
+  if( i == "臺北市"){
+    
+    var_X = paste(col_X_03_01[col_X_03_01 != "Cluster"], collapse = " + ")
+    
+  }else{
+    
+    var_X = paste(col_X_03_01, collapse = " + ")
+  }
+  
+# spaMM_fitting
+  
+  for (corr in c("Cauchy", "Matern")){
+#     
+#     spa_random = sprintf("%s(0+%s|X+Y)", corr, col_X_03_02)
+#     f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+#     print(f)
+#     glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family=negbin(), method="REML" )
+    file.name = paste0(path, sprintf("/%s/%s_%s.rds",corr, corr,i))
+#     saveRDS(glmm_ComPo, file.name)
+   glmm_ComPo = readRDS(file.name)
+    
+# spaMM_fitting_plot
+    getwd()
+    # type = c("deviance", "pearson", "response", "std_dev_res")
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_resp_res_%s.png", corr, corr,i))
+    fit = predict(glmm_ComPo,type = "response")
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+ 
+      ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("$\\hat{Nr}$  vs. residuals"), sprintf("corr = %.4f", cor(fit, res))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    plot.name =  paste0(path, sprintf("/%s/Plot/%s_Fit_std_res_%s.png", corr, corr,i))
+    res = residuals(glmm_ComPo,  type = "response")
+    p = ggplot()+
+      geom_point(aes(x = fit %>% as.vector, y = as.vector(res)))+
+      xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_residuals")+ 
+      ggtitle(sprintf("%s %s",corr,i), subtitle =  paste(TeX("$\\hat{Nr}$  vs. residuals"), sprintf("corr = %.4f", cor(fit, res))))
+    p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+    # plot.name =  paste0(path, sprintf("/%s/Plot/%s_Nr_res_%s.png",corr, corr,i))
+    # p = ggplot()+
+    # geom_point(aes(x = Variable_df[idx.county, "Nr"], y = as.vector(res)))+
+    # xlab("Nr")+ ylab("std_dev_residuals")+  ggtitle(sprintf("%s %s",corr,i), subtitle =  "Nr vs. residuals")
+    # p %>% ggsave(plot.name,., width = 12,height = 8, units = "cm")
+    
+  }
+    
+}
+```
+
+
+```{r Morians I}
+
+ozone.dists <- as.matrix(dist(cbind(Variable_df[idx.county, "X"], Variable_df[idx.county, "Y"])))
+
+ozone.dists.inv <- 1/ozone.dists
+diag(ozone.dists.inv) <- 0
+ 
+ozone.dists.inv[1:5, 1:5]
+ape::Moran.I(res, ozone.dists.inv)
+```
+
+
+
+```{r}
+res.cor.df = data.frame(x = as.character(), rho = as.numeric())
+
+for (i in c(1:length(col_X))){
+  var = col_X[i]
+  rho = cor(Variable_df[idx.county,var ],res) 
+  res.cor.df[i,] = c(var, rho)
+}
+```
 

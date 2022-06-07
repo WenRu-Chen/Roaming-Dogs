@@ -1,0 +1,56 @@
+---
+title: "sppois_introduction"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+# Use the `CAR` in hglm
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=8, fig.height=3) 
+```
+
+```{r library ,Warning = F}
+library(MASS)
+library(dplyr)
+library(ggplot2)
+library(raster)
+library(latex2exp) # 在ggplot 中使用latex
+# install.packages("devtools")
+# devtools::install_github("gregmacfarlane/sppois",force = TRUE)
+
+library(hglm)
+```
+
+## Referance
+
+- <file:///C:/Users/ChenWenRu/Downloads/A_Review_of_Software_for_Spatial_Econometrics_in_R.pdf> **介紹很多模型以及可以用甚麼R套件**
+
+- <https://github.com/gregmacfarlane/sppois> 
+- <https://www.mendeley.com/reference-manager/reader/b5cc89c5-f2c9-3cb6-b078-ca8684bc54ce/2cfd5769-d78c-7891-7f7a-877dc16721eb> (`hglm`)
+- <https://cran.r-project.org/web/packages/hglm/vignettes/hglm.pdf> (`hglm`)
+
+```{r }
+data(ohio, package = "hglm.data") # optional 
+
+## fit a CAR model for the median scores of the districts
+X <- model.matrix(MedianScore ~ 1, data = ohioMedian)
+Z <- model.matrix(~ 0 + district, data = ohioMedian)
+ohioCAR <- hglm(y = ohioMedian$MedianScore, X = X, Z = Z,rand.family = CAR(D = ohioDistrictDistMat))
+summary(ohioCAR)
+```
+```{r}
+hv = ohioCAR$hv
+fv = ohioCAR$fv
+```
+```{r}
+CARfit <- matrix(ohioCAR$ranef + ohioCAR$fixef, dimnames = list(rownames(ohioDistrictDistMat), NULL))
+```
+
+
