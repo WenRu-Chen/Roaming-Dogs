@@ -58,10 +58,9 @@ nu = .5; rho = 1
 
 dd <- runif(10000, 0,100)
 mm <- MaternCorr(dd, nu = nu, rho = rho)
+main = sprintf("Matérn covariance function, nu = %.2f ; rho = %.0f",nu, rho)
 
-qplot(x = dd, y = mm)
-
-plot(as.numeric(dd), as.numeric(mm), xlab = "Distance between pairs of location [in m]", ylab = "Estimated correlation")
+qplot(as.numeric(dd), as.numeric(mm), geom=c("line"), xlab = "Distance between pairs of location [in m]",  ylab = "Estimated correlation", main = "Matérn covariance function")
 ```
 
 **不過`spaMM`的 $\rho$ 是這邊的`倒數`，因為這篇文章說 $C_{\nu = 0.5}(d) = {\sigma^2}exp(-{d}{\rho})$，$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp({-d^2}{\rho^2})$**
