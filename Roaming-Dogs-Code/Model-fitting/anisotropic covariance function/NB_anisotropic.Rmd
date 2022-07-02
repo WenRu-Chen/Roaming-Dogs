@@ -1,0 +1,313 @@
+---
+title: "Anisotropic covariance function NB"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=FALSE,warning = FALSE)
+knitr::opts_chunk$set(fig.width=8, fig.height=3)
+```
+
+```{r library ,warning = FALSE, message=FALSE}
+library(MASS)
+library(spaMM)
+library(dplyr)
+library(ggplot2)
+library(raster)
+library(latex2exp) # 在ggplot 中使用latex
+library(GWmodel)      ### GW models
+```
+
+
+## 模型結構
+
+$$\bf  g(\mu) = \eta =  X  \beta+ b =  X  \beta+  M v $$
+$$\bf  M = ZL \ or \ ZAL$$
+
+
+- $g(.)$ : link function \n
+- $\bf b$ : 隨機效應，由已知的 “design matrix” $ \boldsymbol Z$ 與 $\boldsymbol v$ 組成。 \n
+  - 若隨機效應彼此之間有關係（$\bf u$ not indepoendent），則可以將隨機效應表示成 $\bf Mv$, $\bf M = ZL \ or \ ZAL$ \n
+  - $\bf Z$: 通常是一個關聯矩陣,兩者相鄰為1，不相鄰為0。 \n
+  - $\bf A$: The optional A factor can also be given by the optional "AMatrices" attribute of covStruct. \n
+  - $\bf L$: 對於空間的隨機效應來說，通常為**Cholesky “square root”**，由Matern等距離相關矩陣分解而成。(For spatial random effects, L is typically the Cholesky “square root” of a correlation matrix determined by the random effect specification (e.g., Matern(...)) \n
+- $\lambda$ 為隨機效應(Random effect)的變異數(Variance)，$\phi$ 為殘差(Residuals)的變異數(Variance)。 \n
+
+`spaMM` 會提供固定效應的參數($\boldsymbol \beta$)的估計與隨機效應的分布情形（the variances of $u_i$ and of the residual error $e_i$）以及 $\boldsymbol Z$ 的相關係數(在空間模型的情況下，例如 Matern 的$\rho , \nu$)
+
+
+### Matérn covariance function
+
+是統計學中的一個協方差函數。它常被用於定義兩點測量值之間的協方差。由於該協方差只取決於**兩點間的距離**，因而是平穩的。如使用**歐幾里得**距離來定義距離，此時的馬特恩協方差函數是各向同性的。(取自維基百科)
+
+因此通常使用該協方差矩陣來解釋空間之間的相關性。
+
+$$C_{\nu}(d) = {\sigma^2}\frac{2^{1-\nu}}{\Gamma(\nu)}(\sqrt{2\nu}\frac{d}{\rho})K_{\nu}(\sqrt{2\nu}\frac{d}{\rho})$$
+
+- $d$: 兩點的距離 \n
+- $\Gamma(.)$: $\Gamma(.)$ 函數 \n
+- $\rho, \nu$: 非負參數，$\rho$ 為 scale parameter(尺度參數)，$\nu$ 為 smoothing parameter(平滑參數)，越大越平滑 \n
+- ${\displaystyle K_{\nu }}$: 第二類貝索函數 \n
+
+當$\nu = 0.5$: \n
+
+$$C_{\nu = 0.5}(d) = {\sigma^2}exp(-\frac{d}{\rho})$$
+
+當$\nu \rightarrow \infty$: \n
+
+$$\mathop{lim}\limits_{\nu \rightarrow \infty} C_{\nu}(d) = {\sigma^2}exp(-\frac{d^2}{\rho^2})$$
+
+```{r }
+nu = c(.25, .5, 1, 1.5, 2); rho = 1
+dd <- runif(1000, 0,10)
+dir.new <- nu %>%
+  lapply(function(x) MaternCorr(dd, nu = x, rho = rho))
+
+M_df = data.frame(nu = as.numeric(), rho = as.numeric(), M = as.numeric(), d = as.numeric())
+
+
+for (i in c(1:length(dir.new))){
+  df = data.frame(nu = nu[i], rho = rho, M = (dir.new[i]), d = dd)
+  colnames(df) = c("nu", "rho", "M", "d")
+  M_df = rbind(M_df, df)
+  
+}
+
+ggplot(M_df)+geom_line(aes(x = d, y = M, group = nu, color = nu), size = 1)+ggtitle("Matérn covariance function (rho = 1)")
+```
+
+
+```{r plot }
+nu = c(.5); rho = c(.25, .5, 1, 1.5,2)
+dd <- runif(1000, 0,10)
+dir.new <- rho %>%
+  lapply(function(x) MaternCorr(dd, nu = nu, rho = x))
+
+M_df = data.frame(nu = as.numeric(), rho = as.numeric(), M = as.numeric(), d = as.numeric())
+
+for (i in c(1:length(dir.new))){
+  df = data.frame(nu = nu, rho = rho[i], M = (dir.new[i]), d = dd)
+  colnames(df) = c("nu", "rho", "M", "d")
+  M_df = rbind(M_df, df)
+  
+}
+
+ggplot(M_df)+geom_line(aes(x = d, y = M, group = rho, color = rho), size = 1)+ggtitle("Matérn covariance function (nu = .5)")
+```
+
+## Cauchy covariance function
+
+$$C_{cau}(d) = (1-Nuggest)(1+(\rho d)^{\nu})(longdep/\nu))$$
+
+- $Nuggest$: 金塊效應，算是某種誤差 \n
+- $\rho$: `rho`，尺寸參數(scaling factor) \n
+- $\nu$:`shape`，形狀（平滑）參數，若距離為歐式距離，$0< \nu \leq 2$；若為大圓距離 (Great-circle distance)，$0< \nu \leq 1$。\n
+- $longdep$: `longdep`，給出相關性隨距離漸近減小的指數，大於零的實數。\n
+
+
+## Model fitting
+
+#### COMPoisson family
+
+Conway-Maxwell-Poisson 是以計數型的 Poisson 為基礎發展出來的分配，是為了解決那些過度分散或者過度集中(over- and underdispersion)的計數型分配。
+
+$$Pr(y;\lambda, \nu_{CMP}) = \frac{\lambda^y}{(y!)^{\nu_{CMP}}Z(\lambda, \nu_{CMP})}$$
+$$Z(\lambda, \nu_{CMP}) = \sum^ \infty_{k=0}\frac{\lambda^k}{(k!)^{\nu_{CMP}}}$$
+- $\nu_{CMP}$: 其值越小，分布程度越廣(overdispersion); 其值越大，分布程度越集中(underdispersion);$\nu_{CMP} = 1$ 的時候就是 poisson 分配。
+
+```{r Load data }
+path = '..\\..\\..\\Roaming-Dogs-Data\\'
+
+# Variable_df <- read.csv(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ), fileEncoding = 'utf-8')
+Variable_shp<-shapefile(paste0(path, "@Taiwan_sampling_village_variable\\Taiwan_sampling_village_variable.shp" ),encoding = 'utf-8')
+Variable_shp@data["School"] <- rowSums(Variable_shp@data[c("Ele","Junior" ,"Senior")])
+Variable_shp@data["Student"] <- rowSums(Variable_shp@data[c("Ele_stu","Junior_stu" ,"Senior_stu")])
+Variable_shp@data[is.na(Variable_shp@data)] <- 0
+
+Variable_shp@data$Nr = Variable_shp@data$Nr %>% as.integer()
+```
+```{r}
+
+col_X = 
+  c( "Cluster",# 分群
+     "Hospital","Clinic", "Temple", "School", "Train.stat", # 公共建設
+     "Student", "Train.crow", # 人流
+     "high_rat",   "mid_rat","low_rat", "M_F_RAT" ,"P_H_CNT","H_CNT", "P_DEN", "YOUN_DEP","OLD_DEP","AGING_IDX", # 人口統計(教育程度、人口密度...)
+     "Income_mea","Income_sta", # 村里收入
+     "Area_sqkm") 
+col_y = c("Nr")
+```
+
+```{r 轉成數值}
+for(i in c(col_X, col_y, "P_CNT", "X","Y")){
+
+  Variable_shp@data[i] = sapply(Variable_shp@data[i], function(x) as.numeric(x))
+  
+  # if( i != "Cluster" & i != "Nr" & i != "X" & i != "Y")  {
+  #   Variable_shp@data[i] = scale(Variable_shp@data[i])
+  # }
+}
+
+Variable_df = Variable_shp@data
+```
+
+
+## Fitting model
+
+## Rotation
+
+### 公式與示意圖
+- chrome-extension://dagcmkpagjlhakfdhnbomgmjdpkdklff/enhanced-reader.html?openApp&pdf=https%3A%2F%2Fonlinelibrary.wiley.com%2Fdoi%2Fpdfdirect%2F10.1002%2F9780470974391
+(p.101，5.1  Geometric anisotropy)
+旋轉成橢圓
+
+```{r}
+# 產生資料點
+circleFun <- function(center = c(0,0),diameter = 1, npoints = 100){
+    r = diameter / 2
+    tt <- seq(0,2*pi,length.out = npoints)
+    xx <- center[1] + r * cos(tt)
+    yy <- center[2] + r * sin(tt)
+    return(data.frame(x = xx, y = yy))
+}
+```
+
+$$\bf h^* = Rh $$
+$$\bf R = \begin{bmatrix}
+cos(\theta) & sin(\theta)\\
+-sin(\theta) & cos(\theta)
+\end{bmatrix}$$
+
+- $\theta$ 是旋轉的角度
+
+$$\bf T = \begin{bmatrix}
+\frac{1}{b_1^{1/2}} & 0\\
+0 & \frac{1}{b_2^{1/2}}
+\end{bmatrix}$$
+
+- $T$ 為控制長度的矩陣
+
+$$ \bf \tilde{h} = TRh$$
+
+```{r}
+
+# 轉成橢圓
+rat_long <- function(x,y ,degree = 0, b1 = 1, b2 = 1){
+  c = cos(degree*pi/180); s = sin(degree*pi/180)
+  
+  R = matrix(c(c,-s,s,c), nrow = 2, ncol = 2)
+  T = matrix(c(1/(b1^(.5)),0,0,1/(b2^(.5))), nrow = 2, ncol = 2)
+  B = t(R) %*% t(T) %*% T %*%R
+  xy = matrix(c(x,y), ncol = 2)
+  # print(xy)
+  new_xy = T %*% R %*% t(xy)
+  cir_new = data.frame(X_new = new_xy[1,], Y_new = new_xy[2,])
+  return(cir_new)
+}
+```
+
+```{r}
+cir = circleFun(diameter = 2, npoints = 100)
+set.seed(100)
+idx = sample(cir$x,1)
+idx = cir$x %in% idx
+cir["index"] = as.integer(idx)
+```
+
+```{r  fig.width = 4, fig.height = 4}
+p0 = ggplot(cir,aes(x = x,y = y)) +
+  geom_path()+
+  geom_point(aes(color = as.factor(index)))+
+  xlim(c(-1,1))+ylim(c(-1,1))+
+  theme(legend.position="none")
+p0
+```
+```{r   fig.width = 4, fig.height = 4}
+cir_new = rat_long(x = cir$x,y = cir$y,degree = 90, b1 = 1, b2 = .25)
+cir_new["index"] = as.integer(idx)
+
+p0 = ggplot(cir_new, aes(x = X_new,y = Y_new )) + 
+  geom_path()+
+  geom_point(aes(color = as.factor(index)))+
+  xlim(c(-2,2))+ylim(c(-2,2))+
+  theme(legend.position="none")
+
+p0
+```
+
+### model 1
+
+```{r }
+col_X_03_01 = c("I((Income_mea)^2)", "offset(log(Area_sqkm))")
+col_X_03_02 = "Cluster"
+
+var_X = paste(col_X_03_01, collapse = " + ")
+
+counties = "臺南市"
+idx.county = Variable_shp@data$COUNTYNAME == counties 
+
+print( sum(idx.county))
+
+corr = "Matern"; col_X_03_02 = "Cluster"
+
+spa_random = sprintf("%s(0+%s|X_new+Y_new)", corr, col_X_03_02)
+
+f = as.formula(paste("Nr ~", var_X, "+",spa_random));f
+```
+
+```{r 轉換資料加上fit model}
+
+nb = 3; nd = 5
+b2_list = seq(0.5,3,length.out = nb)
+d_list = seq(0,180,length.out = nd)
+fit_list = res_list = par_list = model_list = list()
+i = 1; j = 2
+
+# for(i in c(1:nb)){
+#   for(j in c(1:(nd-1))){
+  
+  b = b2_list[i]
+  d = d_list[j]
+  
+  print("========================")  
+  
+  df = Variable_df[idx.county,]
+    
+  new_XY = rat_long(x = df$X, y =  df$Y ,degree = d, b1 = 1, b2 = b)
+  
+  df_newXY = cbind(df, new_XY)
+  
+  glmm_ComPo = fitme(f,data= df_newXY[, c(col_y, col_X,  "X_new", "Y_new")], family = negbin())
+    
+  print( summary(glmm_ComPo))
+
+  fit = list(as.vector(predict(glmm_ComPo,type = "response")))
+  fit_list = append(fit_list, fit)
+  res = list(as.vector(residuals(glmm_ComPo,  type = "std_dev_res")))
+  res_list = append(res_list, res)
+  par = list(c("b2" = b, "d" = d))
+  par_list = append(par_list, par)
+#   }
+# }
+
+```
+
+```{r  fig.width = 10, fig.height = 4}
+# spaMM_fitting_plot
+i = 12
+p1 = ggplot()+
+  geom_point(aes(x = fit_list[[i]], y = res_list[[i]]))+
+  xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res")+  
+  geom_hline(yintercept=3 ,linetype="dashed",colour="#281a14",size = .5)+
+  geom_hline(yintercept=-3,linetype="dashed",colour="#281a14",size = .5)+
+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
+
+p2 = ggplot()+geom_histogram(aes(x = res_list[[i]], y = ..density..), bins = 10)+
+  geom_density(aes(x = as.vector(res_list[[i]]), y = ..density..))+
+  xlab("std_dev_res")+ggtitle(sprintf("%s %s",corr,counties))
+
+ggpubr::ggarrange(p1,p2)
+```
+
+
+

@@ -8,7 +8,7 @@ knitr::opts_chunk$set(echo = F, message=FALSE,warning = FALSE)
 knitr::opts_chunk$set(fig.width=8, fig.height=3)
 ```
 
-```{r library ,Warning = F}
+```{r library ,warning = FALSE, message=FALSE}
 library(MASS)
 library(spaMM)
 library(dplyr)
@@ -148,6 +148,16 @@ for(i in c(col_X, col_y, "P_CNT", "X","Y")){
 Variable_df = Variable_shp@data
 ```
 
+## Fitting model
+
+```{r}
+col_X_03 = c("Cluster", "P_H_CNT", "Area_sqkm")
+var_X = paste(col_X_03, collapse = " + ")
+
+counties = "臺中市"
+idx.county = Variable_shp@data$COUNTYNAME == counties 
+```
+
 ### Model 01
 
 - package: spaMM
@@ -156,12 +166,6 @@ Variable_df = Variable_shp@data
 - 關聯矩陣：Cauchy、Matern (參數 `spaMM` 會給)
 
 ```{r }
-col_X_03 = c("Cluster", "P_H_CNT", "Area_sqkm")
-var_X = paste(col_X_03, collapse = " + ")
-
-counties = "臺中市"
-idx.county = Variable_shp@data$COUNTYNAME == counties 
-
 # spaMM_fitting
 
 corr = "Cauchy"
@@ -285,7 +289,6 @@ f = as.formula(paste("Nr ~", var_X, "+",spa_random))
 glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = COMPoisson())
 ```
 
-
 ```{r }
 
 # spaMM_fitting_plot
@@ -312,7 +315,6 @@ p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins 
 ```{r, fig.width = 10, fig.height = 8}
 ggpubr::ggarrange(p1,p2,p3,p4)
 ```
-
 
 ```{r}
 # spaMM_fitting
@@ -326,7 +328,6 @@ glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], 
 
 ```
 
-
 ```{r }
 
 # spaMM_fitting_plot
@@ -353,9 +354,6 @@ p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins 
 ```{r, fig.width = 10, fig.height = 8}
 ggpubr::ggarrange(p1,p2,p3,p4)
 ```
-
-
-
 
 ### Model 03
 
@@ -602,105 +600,6 @@ ggpubr::ggarrange(p1,p2,p3,p4)
 
 
 
-### Model 04
-
-- package: spaMM
-- family = COMPoisson()
-- 變數：層級(p.s. 台北市沒有)、戶量、里面積（平方公里）
-- random slop 
-- 關聯矩陣：Cauchy、Matern (參數 `spaMM` 會給)
-
-```{r }
-# col_X_03_01 = c("Cluster",  "P_H_CNT","offset(log(Area_sqkm))")
-col_X_03_01 = c("offset(log(Area_sqkm))")
-col_X_03_02 = "P_H_CNT"
-
-var_X = paste(col_X_03_01, collapse = " + ")
-
-counties = "彰化縣"
-idx.county = Variable_shp@data$COUNTYNAME == counties 
-
-# spaMM_fitting
-
-corr = "Cauchy"
-
-spa_random = sprintf("%s(0+%s|X+Y)", corr, col_X_03_02)
-f = as.formula(paste("Nr ~", var_X, "+",spa_random))
-
-glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = negbin())
-```
-
-```{r}
-glmm_ComPo %>% summary
-```
-
-
-```{r }
-
-# spaMM_fitting_plot
-
-fit = predict(glmm_ComPo,type = "response")
-res.res = residuals(glmm_ComPo,  type = "response")
-std.res = residuals(glmm_ComPo,  type = "std_dev_res")
-p1 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(res.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
-
-p2 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(std.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
-
-p3 = ggplot()+geom_histogram(aes(x = as.vector(res.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(res.res), y = ..density..))+
-  xlab("response residuals")+ggtitle(sprintf("%s %s",corr,counties))
-
-p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(std.res), y = ..density..))+
-  xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
-```
-```{r, fig.width = 10, fig.height = 8}
-ggpubr::ggarrange(p1,p2,p3,p4)
-```
-
-```{r}
-# spaMM_fitting
-
-corr = "Matern"
-
-spa_random = sprintf("%s(0+%s|X+Y)", corr, col_X_03_02)
-f = as.formula(paste("Nr ~", var_X, "+",spa_random))
-
-glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = COMPoisson())
-
-```
-
-```{r }
-
-# spaMM_fitting_plot
-
-fit = predict(glmm_ComPo,type = "response")
-res.res = residuals(glmm_ComPo,  type = "response")
-std.res = residuals(glmm_ComPo,  type = "std_dev_res")
-p1 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(res.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
-
-p2 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(std.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
-
-p3 = ggplot()+geom_histogram(aes(x = as.vector(res.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(res.res), y = ..density..))+
-  xlab("response residuals")+ggtitle(sprintf("%s %s",corr,counties))
-
-p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(std.res), y = ..density..))+
-  xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
-```
-```{r, fig.width = 10, fig.height = 8}
-ggpubr::ggarrange(p1,p2,p3,p4)
-```
-
 ### Model 05
 
 - package: spaMM
@@ -711,19 +610,21 @@ ggpubr::ggarrange(p1,p2,p3,p4)
 
 
 ```{r }
-counties = "臺中市"
+col_X_03_01 = c("Income_mea", "offset(log(Area_sqkm))")
+col_X_03_02 = "Cluster"
+
+var_X = paste(col_X_03_01, collapse = " + ")
+
+counties = "彰化縣"
 idx.county = Variable_shp@data$COUNTYNAME == counties 
-# var_X = "P_DEN + AGING_IDX + Income_mea +offset(log(Area_sqkm))"
 
-var_X = "1 +offset(log(Area_sqkm))"
-
-# high_rat +M_F_RAT+
+var_X
 ```
 
 #### Without spatial
 
 ```{r }
-
+corr = " No spatial"
 f = as.formula(paste("Nr ~", var_X))
 
 glmm_ComPo = fitme(f,data= Variable_df[idx.county, c(col_y, col_X,  "X", "Y")], family = negbin())
@@ -738,26 +639,21 @@ glmm_ComPo %>% summary
 # spaMM_fitting_plot
 
 fit = predict(glmm_ComPo,type = "response")
-res.res = residuals(glmm_ComPo,  type = "response")
 std.res = residuals(glmm_ComPo,  type = "std_dev_res")
-p1 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(res.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
 
-p2 = ggplot()+
+p1 = ggplot()+
   geom_point(aes(x = fit %>% as.vector, y = as.vector(std.res)))+
   xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
 
-p3 = ggplot()+geom_histogram(aes(x = as.vector(res.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(res.res), y = ..density..))+
-  xlab("response residuals")+ggtitle(sprintf("%s %s",corr,counties))
 
-p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
+p2 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
   geom_density(aes(x = as.vector(std.res), y = ..density..))+
   xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
 ```
-```{r, fig.width = 10, fig.height = 8}
-ggpubr::ggarrange(p1,p2,p3,p4)
+
+
+```{r, fig.width = 10, fig.height = 4}
+ggpubr::ggarrange(p1,p2)
 ```
 
 #### Cauchy
@@ -782,26 +678,18 @@ glmm_ComPo %>% summary
 # spaMM_fitting_plot
 
 fit = predict(glmm_ComPo,type = "response")
-res.res = residuals(glmm_ComPo,  type = "response")
 std.res = residuals(glmm_ComPo,  type = "std_dev_res")
-p1 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(res.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
 
-p2 = ggplot()+
+p1 = ggplot()+
   geom_point(aes(x = fit %>% as.vector, y = as.vector(std.res)))+
   xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
 
-p3 = ggplot()+geom_histogram(aes(x = as.vector(res.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(res.res), y = ..density..))+
-  xlab("response residuals")+ggtitle(sprintf("%s %s",corr,counties))
-
-p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
+p2 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
   geom_density(aes(x = as.vector(std.res), y = ..density..))+
   xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
 ```
-```{r, fig.width = 10, fig.height = 8}
-ggpubr::ggarrange(p1,p2,p3,p4)
+```{r, fig.width = 10, fig.height = 4}
+ggpubr::ggarrange(p1,p2)
 ```
 
 
@@ -828,24 +716,177 @@ glmm_ComPo %>% summary
 # spaMM_fitting_plot
 
 fit = predict(glmm_ComPo,type = "response")
-res.res = residuals(glmm_ComPo,  type = "response")
 std.res = residuals(glmm_ComPo,  type = "std_dev_res")
-p1 = ggplot()+
-  geom_point(aes(x = fit %>% as.vector, y = as.vector(res.res)))+
-  xlab(TeX("$\\hat{Nr}$"))+ ylab("response residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))
 
-p2 = ggplot()+
+p1 = ggplot()+
   geom_point(aes(x = fit %>% as.vector, y = as.vector(std.res)))+
   xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
 
-p3 = ggplot()+geom_histogram(aes(x = as.vector(res.res), y = ..density..), bins = 15)+
-  geom_density(aes(x = as.vector(res.res), y = ..density..))+
-  xlab("response residuals")+ggtitle(sprintf("%s %s",corr,counties))
-
-p4 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
+p2 = ggplot()+geom_histogram(aes(x = as.vector(std.res), y = ..density..), bins = 15)+
   geom_density(aes(x = as.vector(std.res), y = ..density..))+
   xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
 ```
-```{r, fig.width = 10, fig.height = 8}
-ggpubr::ggarrange(p1,p2,p3,p4)
+
+```{r, fig.width = 10, fig.height = 4}
+ggpubr::ggarrange(p1,p2)
 ```
+
+
+## Rotation
+
+### 公式與示意圖
+- chrome-extension://dagcmkpagjlhakfdhnbomgmjdpkdklff/enhanced-reader.html?openApp&pdf=https%3A%2F%2Fonlinelibrary.wiley.com%2Fdoi%2Fpdfdirect%2F10.1002%2F9780470974391
+(p.101，5.1  Geometric anisotropy)
+旋轉成橢圓
+
+```{r}
+# 產生資料點
+circleFun <- function(center = c(0,0),diameter = 1, npoints = 100){
+    r = diameter / 2
+    tt <- seq(0,2*pi,length.out = npoints)
+    xx <- center[1] + r * cos(tt)
+    yy <- center[2] + r * sin(tt)
+    return(data.frame(x = xx, y = yy))
+}
+```
+
+$$\bf h^* = Rh $$
+$$\bf R = \begin{bmatrix}
+cos(\theta) & sin(\theta)\\
+-sin(\theta) & cos(\theta)
+\end{bmatrix}$$
+
+- $\theta$ 是旋轉的角度
+
+$$\bf T = \begin{bmatrix}
+\frac{1}{b_1^{1/2}} & 0\\
+0 & \frac{1}{b_2^{1/2}}
+\end{bmatrix}$$
+
+- $T$ 為控制長度的矩陣
+
+$$ \bf \tilde{h} = TRh$$
+
+```{r}
+
+# 轉成橢圓
+rat_long <- function(x,y ,degree = 0, b1 = 1, b2 = 1){
+  c = cos(degree*pi/180); s = sin(degree*pi/180)
+  
+  R = matrix(c(c,-s,s,c), nrow = 2, ncol = 2)
+  T = matrix(c(1/(b1^(.5)),0,0,1/(b2^(.5))), nrow = 2, ncol = 2)
+  B = t(R) %*% t(T) %*% T %*%R
+  xy = matrix(c(x,y), ncol = 2)
+  # print(xy)
+  new_xy = T %*% R %*% t(xy)
+  cir_new = data.frame(X_new = new_xy[1,], Y_new = new_xy[2,])
+  return(cir_new)
+}
+```
+
+```{r}
+cir = circleFun(diameter = 2, npoints = 100)
+set.seed(100)
+idx = sample(cir$x,1)
+idx = cir$x %in% idx
+cir["index"] = as.integer(idx)
+```
+
+```{r  fig.width = 4, fig.height = 4}
+p0 = ggplot(cir,aes(x = x,y = y)) +
+  geom_path()+
+  geom_point(aes(color = as.factor(index)))+
+  xlim(c(-1,1))+ylim(c(-1,1))+
+  theme(legend.position="none")
+p0
+```
+```{r   fig.width = 4, fig.height = 4}
+cir_new = rat_long(x = cir$x,y = cir$y,degree = 90, b1 = 1, b2 = .25)
+cir_new["index"] = as.integer(idx)
+
+p0 = ggplot(cir_new, aes(x,y )) + 
+  geom_path()+
+  geom_point(aes(color = as.factor(index)))+
+  xlim(c(-2,2))+ylim(c(-2,2))+
+  theme(legend.position="none")
+
+p0
+```
+
+### model 6
+
+```{r }
+col_X_03_01 = c("1", "offset(log(Area_sqkm))")
+col_X_03_02 = "Cluster"
+
+var_X = paste(col_X_03_01, collapse = " + ")
+
+counties = "臺中市"
+idx.county = Variable_shp@data$COUNTYNAME == counties 
+
+print = (var_X)
+
+corr = "Matern"; col_X_03_02 = "Cluster"
+
+spa_random = sprintf("%s(0+%s|X_new+Y_new)", corr, col_X_03_02)
+
+f = as.formula(paste("Nr ~", var_X, "+",spa_random))
+f;col_X
+```
+
+```{r 轉換資料加上fit model}
+
+nb = 5; nd = 5
+b2_list = seq(0.5,2,length.out = nb)
+d_list = seq(0,180,length.out = nd)
+fit_list =res_list =  model_list = list()
+
+
+for(i in c(1:nb)){
+  for(j in c(1:(nd-1))){
+  
+  b = b2_list[i]
+  d = d_list[j]
+  
+  print("========================")  
+    
+  new_XY = rat_long(x = Variable_df$X, y =  Variable_df$Y ,degree = d, b1 = 1, b2 = b)
+  
+  Variable_df_newXY = cbind(Variable_df,new_XY)
+  print(colnames(Variable_df_newXY[idx.county, c(col_y, col_X,  "X_new", "Y_new")]))
+  
+  glmm_ComPo = fitme(f,data= Variable_df_newXY[idx.county, c(col_y, col_X,  "X_new", "Y_new")], family = negbin())
+    
+  print( summary(glmm_ComPo),predict(glmm_ComPo,type = "response"),residuals(glmm_ComPo,  type = "std_dev_res"))
+
+  fit = list(c(d, b), as.vector(predict(glmm_ComPo,type = "response")))
+  fit_list = append(fit_list, fit)
+  res = list(c(d, b), as.vector(residuals(glmm_ComPo,  type = "std_dev_res")))
+  res_list = append(res_list, res)
+  }
+}
+
+```
+```{r}
+fit_list
+```
+
+
+```{r  fig.width = 10, fig.height = 4}
+# spaMM_fitting_plot
+i = 5
+p1 = ggplot()+
+  geom_point(aes(x = fit_list[[i]], y = res_list[[i]]))+
+  xlab(TeX("$\\hat{Nr}$"))+ ylab("std_dev_res residuals")+  ggtitle(sprintf("%s %s",corr,counties), subtitle =  TeX("$\\hat{Nr}$ vs. residuals"))  
+
+p2 = ggplot()+geom_histogram(aes(x = res_list[[i]], y = ..density..), bins = 15)+
+  geom_density(aes(x = as.vector(std.res), y = ..density..))+
+  xlab("std_dev_res residuals")+ggtitle(sprintf("%s %s",corr,counties))
+
+ggpubr::ggarrange(p1,p2)
+```
+```{r, fig.width = 10, fig.height = 4}
+ggpubr::ggarrange(p1,p2)
+```
+
+

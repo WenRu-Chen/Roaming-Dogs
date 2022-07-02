@@ -1,0 +1,35 @@
+---
+title: "spTest: An R Package Implementing Nonparametric Tests of Isotropy"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=FALSE,warning = FALSE)
+knitr::opts_chunk$set(fig.width=8, fig.height=3)
+```
+
+## Applications: Using spTest to check for anisotropy
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library("spTest") # 沒有版本
+library("fields")
+library("geoR") # 沒有版本
+library("splines")
+library("MASS")
+library("rgdal")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
